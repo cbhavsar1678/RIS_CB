@@ -42,6 +42,10 @@ export const CustomerPanel: React.FC<CustomerPanelProps> = ({
   const [modOptions, setModOptions] = useState<string[]>([]);
   const [customMod, setCustomMod] = useState('');
 
+  // QR-Code Ordering States
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [isQROrder, setIsQROrder] = useState(false);
+
   const currentStore = stores.find((s) => s.id === currentStoreId) || stores[0];
 
   const filteredRecipes = recipes.filter(
@@ -130,6 +134,8 @@ export const CustomerPanel: React.FC<CustomerPanelProps> = ({
   };
 
   const cartTotal = cart.reduce((sum, item) => sum + item.recipe.retailPrice! * item.quantity, 0);
+  const qrDiscount = isQROrder ? cartTotal * 0.05 : 0;
+  const finalCartTotal = cartTotal - qrDiscount;
 
   const handleCheckout = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,7 +157,7 @@ export const CustomerPanel: React.FC<CustomerPanelProps> = ({
       fulfillmentType: fulfillmentType === 'Dine-In' ? 'Dine-In' : 'Takeaway',
       status: 'Received',
       orderDate: new Date().toISOString(),
-      totalAmount: cartTotal,
+      totalAmount: finalCartTotal,
       items: cart.map((c) => ({
         recipeId: c.recipe.id,
         name: c.recipe.name,
@@ -226,6 +232,19 @@ export const CustomerPanel: React.FC<CustomerPanelProps> = ({
                 Tracking Order #{activeOrder.id.replace('ord-cust-', '')} ({activeOrder.status})
               </button>
             )}
+
+            <button
+              id="foh-qr-scanner-button"
+              onClick={() => setShowQRScanner(true)}
+              className={`p-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                isQROrder
+                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                  : 'bg-orange-500 hover:bg-orange-600 text-white shadow-md shadow-orange-500/10'
+              }`}
+            >
+              <span>🎟️</span>
+              <span className="hidden sm:inline">{isQROrder ? 'Table QR Active (5% Off)' : 'Scan Table QR'}</span>
+            </button>
 
             <button
               id="foh-cart-button"
@@ -781,13 +800,19 @@ export const CustomerPanel: React.FC<CustomerPanelProps> = ({
                       <span className="text-gray-400 dark:text-gray-500">Subtotal Amount:</span>
                       <span className="font-bold">${cartTotal.toFixed(2)}</span>
                     </div>
+                    {isQROrder && (
+                      <div className="flex items-center justify-between mb-1.5 text-xs text-emerald-500 font-bold">
+                        <span>Tableside QR Loyalty (5% Off):</span>
+                        <span>-${qrDiscount.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between mb-3 text-xs">
                       <span className="text-gray-400 dark:text-gray-500">Tax & FOH Surcharges:</span>
                       <span className="font-bold text-emerald-500">FREE</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-bold text-gray-900 dark:text-white">Order Total:</span>
-                      <span className="font-extrabold text-orange-500 text-base">${cartTotal.toFixed(2)}</span>
+                      <span className="font-extrabold text-orange-500 text-base">${finalCartTotal.toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -801,6 +826,113 @@ export const CustomerPanel: React.FC<CustomerPanelProps> = ({
                 </form>
               )}
             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Tableside QR-Code Ordering Simulator Modal */}
+      <AnimatePresence>
+        {showQRScanner && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setShowQRScanner(false)} />
+            
+            <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center overflow-hidden z-10">
+              <div className="w-full flex justify-between items-center mb-4 pb-2 border-b">
+                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <span>🎟️</span> Tableside QR Code Ordering
+                </h3>
+                <button
+                  onClick={() => setShowQRScanner(false)}
+                  className="p-1.5 bg-slate-150 dark:bg-slate-800 text-slate-500 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                Scan or simulate scanning a tabletop QR code to lock in your location, assign table coordinates, and unlock a <strong className="text-emerald-500">5% FOH Loyalty Discount</strong>.
+              </p>
+
+              {/* Simulated Mobile Camera Scan Frame */}
+              <div className="relative w-52 h-52 bg-slate-950 rounded-2xl overflow-hidden shadow-inner border border-slate-800 flex items-center justify-center mb-6">
+                {/* Laser scan line */}
+                <div className="absolute inset-x-0 h-0.5 bg-orange-500/80 shadow-[0_0_8px_#f97316] animate-[pulse_2s_infinite] top-1/2 -translate-y-1/2 z-10" />
+                
+                {/* Stylized custom SVG QR code matrix */}
+                <svg className="w-40 h-40 text-slate-100" viewBox="0 0 100 100" fill="currentColor">
+                  <path d="M5,5 h30 v30 h-30 z M15,15 h10 v10 h-10 z" />
+                  <path d="M65,5 h30 v30 h-30 z M75,15 h10 v10 h-10 z" />
+                  <path d="M5,65 h30 v30 h-30 z M15,75 h10 v10 h-10 z" />
+                  <path d="M45,15 h10 v10 h-10 z M55,25 h10 v10 h-10 z M35,45 h10 v10 h-10 z M45,55 h10 v10 h-10 z" />
+                  <path d="M65,45 h10 v10 h-10 z M85,45 h10 v10 h-10 z M55,65 h15 v5 h-15 z M75,75 h20 v20 h-20 z M45,85 h10 v10 h-10 z" />
+                  <rect x="42" y="42" width="16" height="16" fill="#f97316" rx="4" />
+                </svg>
+                
+                <div className="absolute bottom-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest animate-pulse">
+                  Align Table QR...
+                </div>
+              </div>
+
+              {/* Selector form */}
+              <div className="w-full space-y-4 mb-6">
+                <div className="grid grid-cols-2 gap-3 text-left">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Target Outlet</label>
+                    <select
+                      id="qr-select-store"
+                      defaultValue={currentStoreId}
+                      className="w-full bg-slate-50 dark:bg-slate-850 border rounded-xl px-2.5 py-2 text-xs font-bold focus:outline-none"
+                    >
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Table Coordinates</label>
+                    <select
+                      id="qr-select-table"
+                      defaultValue="7"
+                      className="w-full bg-slate-50 dark:bg-slate-850 border rounded-xl px-2.5 py-2 text-xs font-bold focus:outline-none"
+                    >
+                      {['2', '4', '7', '11', '15', '22'].map((num) => (
+                        <option key={num} value={num}>Table {num}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 w-full">
+                <button
+                  id="btn-qr-simulate-close"
+                  onClick={() => {
+                    setIsQROrder(false);
+                    setShowQRScanner(false);
+                    alert('Tableside QR mode cleared. Regular checkout pricing applies.');
+                  }}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-850 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs cursor-pointer transition-colors"
+                >
+                  Reset / Regular
+                </button>
+                <button
+                  id="btn-qr-simulate-success"
+                  onClick={() => {
+                    const storeId = (document.getElementById('qr-select-store') as HTMLSelectElement).value;
+                    const tableNum = (document.getElementById('qr-select-table') as HTMLSelectElement).value;
+                    setCurrentStoreId(storeId);
+                    setFulfillmentType('Dine-In');
+                    setTableNumber(tableNum);
+                    setIsQROrder(true);
+                    setShowQRScanner(false);
+                    alert(`QR Code Scanned successfully! Locked into Table ${tableNum} at ${stores.find(s=>s.id===storeId)?.name}. FOH loyalty discount of 5% unlocked! 🎟️`);
+                  }}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-orange-500/10 transition-colors"
+                >
+                  ⚡ Simulate Scan
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </AnimatePresence>

@@ -366,6 +366,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
+          {/* Wastage & Spoilage Alert Board */}
+          <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-850 p-6 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 dark:bg-rose-500/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping shrink-0" />
+                Wastage & Spoilage Alert
+              </h3>
+              <span className="bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[10px] font-black px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-900/30">
+                {adjustments.filter(a => (a.reason === 'Wastage' || a.reason === 'Spoilage' || a.reason === 'Theft') && (isMultiStore || a.storeId === currentStoreId)).length} Active
+              </span>
+            </div>
+
+            <div className="space-y-3.5 max-h-[220px] overflow-y-auto no-scrollbar pr-1">
+              {adjustments
+                .filter(a => (a.reason === 'Wastage' || a.reason === 'Spoilage' || a.reason === 'Theft') && (isMultiStore || a.storeId === currentStoreId))
+                .slice(0, 4)
+                .map((a) => {
+                  const product = products.find((p) => p.id === a.productId);
+                  return (
+                    <div key={a.id} className="p-3 bg-rose-50/30 dark:bg-rose-950/10 rounded-2xl border border-rose-100/50 dark:border-rose-900/20 text-xs">
+                      <div className="flex justify-between font-bold text-gray-900 dark:text-white">
+                        <span className="truncate max-w-[70%]">{product?.name || 'Raw Ingredient'}</span>
+                        <span className="text-rose-600 dark:text-rose-400 font-mono font-black">${Math.abs(a.costValue).toFixed(2)} Lost</span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                        Reason: {a.reason} • Qty: {Math.abs(a.quantity)} {product?.stockingUnit || 'Units'} • {a.notes || 'No log details'}
+                      </p>
+                      <div className="text-[9px] text-gray-400 font-medium mt-1">
+                        Logged by {a.performedBy} on {new Date(a.date).toLocaleDateString()}
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {adjustments.filter(a => (a.reason === 'Wastage' || a.reason === 'Spoilage' || a.reason === 'Theft') && (isMultiStore || a.storeId === currentStoreId)).length === 0 && (
+                <div className="text-center py-6">
+                  <CheckCircle size={20} className="text-emerald-500 mx-auto mb-1.5" />
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 font-bold">Zero Wastage Recorded</p>
+                  <p className="text-[9px] text-gray-400 mt-0.5">Kitchen prep is running with 100% yield efficiency!</p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Operational Notifications Feed */}
           <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-850 p-6 shadow-sm">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-3">

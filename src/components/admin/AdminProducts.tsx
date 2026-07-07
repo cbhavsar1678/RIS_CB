@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Search, Plus, Trash2, RotateCcw, Save, Grid, FileSpreadsheet, Package, AlertTriangle, Layers, Image, Camera } from 'lucide-react';
+import { Search, Plus, Trash2, RotateCcw, Save, Grid, FileSpreadsheet, Package, AlertTriangle, Layers, Image, Camera, Edit3 } from 'lucide-react';
 import { Product, Allergen, Store, Supplier, Inventory } from '../../types';
 import { ALLERGENS, INITIAL_SUPPLIERS } from '../../data/mockData';
 import { AllergenGrid, AllergenBadge } from '../AllergenIcons';
@@ -27,6 +27,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
   suppliers,
 }) => {
   const [subTab, setSubTab] = useState<'list' | 'add' | 'spreadsheet' | 'package' | 'archive'>('list');
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
 
@@ -125,40 +126,118 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
     );
   };
 
+  const handleEditProductClick = (prod: Product) => {
+    setEditingProductId(prod.id);
+    const prodInvs = inventories.filter((inv) => inv.productId === prod.id);
+    setFormData({
+      name: prod.name,
+      sku: prod.sku,
+      category: prod.category,
+      basePrice: prod.basePrice.toString(),
+      taxRate: prod.taxRate.toString(),
+      packagingUnit: prod.packagingUnit,
+      unitsPerPackage: prod.unitsPerPackage.toString(),
+      stockingUnit: prod.stockingUnit,
+      supplierId: prod.supplierId,
+      allergens: prod.allergens,
+      imageUrl: prod.imageUrl || '',
+      storeAllocations: stores.map((s) => {
+        const inv = prodInvs.find((i) => i.storeId === s.id);
+        return {
+          storeId: s.id,
+          reorderPoint: inv ? inv.reorderPoint.toString() : '10',
+          parLevel: inv ? inv.parLevel.toString() : '30',
+          parLoc: inv ? inv.storageLocation || 'Shelf' : 'Shelf',
+        };
+      }),
+    });
+    setPreviewImage(prod.imageUrl || null);
+    setFormStage(1);
+    setSubTab('add');
+  };
+
   // Form Submit
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    const newId = `prod-${Date.now()}`;
-    const newProduct: Product = {
-      id: newId,
-      name: formData.name,
-      sku: formData.sku || `SKU-${Date.now().toString().slice(-4)}`,
-      category: formData.category,
-      basePrice: parseFloat(formData.basePrice) || 0,
-      taxRate: parseFloat(formData.taxRate) || 0,
-      packagingUnit: formData.packagingUnit,
-      unitsPerPackage: parseFloat(formData.unitsPerPackage) || 1,
-      stockingUnit: formData.stockingUnit,
-      allergens: formData.allergens,
-      imageUrl: formData.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=60',
-      isActive: true,
-      isArchived: false,
-      supplierId: formData.supplierId,
-    };
 
-    // Add corresponding allocations to Inventories
-    const newInvs: Inventory[] = formData.storeAllocations.map((alloc) => ({
-      id: `inv-${Date.now()}-${alloc.storeId}`,
-      productId: newId,
-      storeId: alloc.storeId,
-      theoreticalStock: 0,
-      reorderPoint: parseFloat(alloc.reorderPoint) || 10,
-      parLevel: parseFloat(alloc.parLevel) || 30,
-      storageLocation: alloc.parLoc || 'Dry Shelf',
-    }));
+    if (editingProductId) {
+      // Update existing product
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === editingProductId
+            ? {
+                ...p,
+                name: formData.name,
+                sku: formData.sku,
+                category: formData.category,
+                basePrice: parseFloat(formData.basePrice) || 0,
+                taxRate: parseFloat(formData.taxRate) || 0,
+                packagingUnit: formData.packagingUnit,
+                unitsPerPackage: parseFloat(formData.unitsPerPackage) || 1,
+                stockingUnit: formData.stockingUnit,
+                supplierId: formData.supplierId,
+                allergens: formData.allergens,
+                imageUrl: formData.imageUrl || p.imageUrl,
+              }
+            : p
+        )
+      );
 
-    setProducts((prev) => [newProduct, ...prev]);
-    setInventories((prev) => [...prev, ...newInvs]);
+      // Update associated inventories
+      setInventories((prev) => {
+        const filtered = prev.filter((inv) => inv.productId !== editingProductId);
+        const updatedInvs = formData.storeAllocations.map((alloc) => {
+          const oldInv = prev.find((i) => i.productId === editingProductId && i.storeId === alloc.storeId);
+          return {
+            id: oldInv ? oldInv.id : `inv-${Date.now()}-${alloc.storeId}`,
+            productId: editingProductId,
+            storeId: alloc.storeId,
+            theoreticalStock: oldInv ? oldInv.theoreticalStock : 0,
+            reorderPoint: parseFloat(alloc.reorderPoint) || 10,
+            parLevel: parseFloat(alloc.parLevel) || 30,
+            storageLocation: alloc.parLoc || 'Dry Shelf',
+          };
+        });
+        return [...filtered, ...updatedInvs];
+      });
+
+      setEditingProductId(null);
+      alert('Product and location allocations updated successfully!');
+    } else {
+      // Create new product
+      const newId = `prod-${Date.now()}`;
+      const newProduct: Product = {
+        id: newId,
+        name: formData.name,
+        sku: formData.sku || `SKU-${Date.now().toString().slice(-4)}`,
+        category: formData.category,
+        basePrice: parseFloat(formData.basePrice) || 0,
+        taxRate: parseFloat(formData.taxRate) || 0,
+        packagingUnit: formData.packagingUnit,
+        unitsPerPackage: parseFloat(formData.unitsPerPackage) || 1,
+        stockingUnit: formData.stockingUnit,
+        allergens: formData.allergens,
+        imageUrl: formData.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=60',
+        isActive: true,
+        isArchived: false,
+        supplierId: formData.supplierId,
+      };
+
+      // Add corresponding allocations to Inventories
+      const newInvs: Inventory[] = formData.storeAllocations.map((alloc) => ({
+        id: `inv-${Date.now()}-${alloc.storeId}`,
+        productId: newId,
+        storeId: alloc.storeId,
+        theoreticalStock: 0,
+        reorderPoint: parseFloat(alloc.reorderPoint) || 10,
+        parLevel: parseFloat(alloc.parLevel) || 30,
+        storageLocation: alloc.parLoc || 'Dry Shelf',
+      }));
+
+      setProducts((prev) => [newProduct, ...prev]);
+      setInventories((prev) => [...prev, ...newInvs]);
+      alert('Product created successfully!');
+    }
 
     // Reset Form
     setFormData({
@@ -211,14 +290,33 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
 
         <button
           id="btn-subtab-prod-add"
-          onClick={() => setSubTab('add')}
+          onClick={() => {
+            setEditingProductId(null);
+            setFormData({
+              name: '',
+              sku: '',
+              category: 'Dry Goods',
+              basePrice: '',
+              taxRate: '0.00',
+              packagingUnit: 'Box',
+              unitsPerPackage: '1',
+              stockingUnit: 'Kg',
+              supplierId: suppliers[0]?.id || '',
+              allergens: [],
+              imageUrl: '',
+              storeAllocations: stores.map((s) => ({ storeId: s.id, reorderPoint: '10', parLevel: '30', parLoc: 'Shelf' })),
+            });
+            setPreviewImage(null);
+            setFormStage(1);
+            setSubTab('add');
+          }}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
             subTab === 'add'
               ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-gray-900'
               : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-100 dark:border-gray-800 hover:bg-gray-50'
           }`}
         >
-          <Plus size={14} /> Add Product (Wizard)
+          <Plus size={14} /> {editingProductId ? 'Edit Product' : 'Add Product (Wizard)'}
         </button>
 
         <button
@@ -320,7 +418,15 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
                       <td className="px-6 py-4">
                         <AllergenGrid codes={prod.allergens} />
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
+                        <button
+                          id={`btn-edit-prod-${prod.id}`}
+                          onClick={() => handleEditProductClick(prod)}
+                          className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/20 p-2 rounded-lg cursor-pointer transition-colors"
+                          title="Edit Product Details"
+                        >
+                          <Edit3 size={14} />
+                        </button>
                         <button
                           id={`btn-archive-prod-${prod.id}`}
                           onClick={() => handleArchiveProduct(prod.id)}
@@ -375,7 +481,9 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
           {/* STAGE 1: General details */}
           {formStage === 1 && (
             <div className="space-y-5">
-              <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-2">Stage 1: Base Details</h3>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-2">
+                {editingProductId ? `Stage 1: Edit base details for ${formData.name}` : 'Stage 1: Base Details'}
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">Ingredient Name</label>

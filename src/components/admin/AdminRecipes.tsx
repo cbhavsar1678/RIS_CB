@@ -33,6 +33,7 @@ export const AdminRecipes: React.FC<AdminRecipesProps> = ({
   setAdjustments,
 }) => {
   const [activeTab, setActiveTab] = useState<'recipes' | 'create' | 'batches'>('recipes');
+  const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
 
   // Create Recipe Form State
   const [recipeName, setRecipeName] = useState('');
@@ -59,6 +60,21 @@ export const AdminRecipes: React.FC<AdminRecipesProps> = ({
     }, 0);
   };
 
+  const handleEditRecipeClick = (recipe: Recipe) => {
+    setEditingRecipeId(recipe.id);
+    setRecipeName(recipe.name);
+    setYieldQty(recipe.yieldQty.toString());
+    setYieldUnit(recipe.yieldUnit);
+    setRetailPrice(recipe.retailPrice.toString());
+    setSalesPlu(recipe.salesPlu);
+    setCategory(recipe.category);
+    setIngredientsLines(recipe.ingredients.map((ing) => ({
+      productId: ing.productId,
+      quantity: ing.quantity,
+    })));
+    setActiveTab('create');
+  };
+
   const handleAddIngredientLine = () => {
     if (products.length === 0) return;
     setIngredientsLines([...ingredientsLines, { productId: products[0].id, quantity: 1 }]);
@@ -75,26 +91,57 @@ export const AdminRecipes: React.FC<AdminRecipesProps> = ({
       return;
     }
 
-    const newRecipe: Recipe = {
-      id: `rec-${Date.now()}`,
-      name: recipeName,
-      yieldQty: parseFloat(yieldQty) || 1,
-      yieldUnit: yieldUnit,
-      salesPlu: salesPlu || `PLU-${Date.now().toString().slice(-3)}`,
-      retailPrice: parseFloat(retailPrice) || 0,
-      category: category,
-      ingredients: ingredientsLines.map((line) => {
-        const prod = products.find((p) => p.id === line.productId)!;
-        return {
-          productId: line.productId,
-          quantity: line.quantity,
-          unit: prod.stockingUnit,
-        };
-      }),
-      isActive: true,
-    };
+    if (editingRecipeId) {
+      // Update existing recipe
+      setRecipes((prev) =>
+        prev.map((r) =>
+          r.id === editingRecipeId
+            ? {
+                ...r,
+                name: recipeName,
+                yieldQty: parseFloat(yieldQty) || 1,
+                yieldUnit: yieldUnit,
+                salesPlu: salesPlu,
+                retailPrice: parseFloat(retailPrice) || 0,
+                category: category,
+                ingredients: ingredientsLines.map((line) => {
+                  const prod = products.find((p) => p.id === line.productId);
+                  return {
+                    productId: line.productId,
+                    quantity: line.quantity,
+                    unit: prod ? prod.stockingUnit : 'Unit',
+                  };
+                }),
+              }
+            : r
+        )
+      );
+      setEditingRecipeId(null);
+      alert('Recipe successfully updated!');
+    } else {
+      // Create new recipe
+      const newRecipe: Recipe = {
+        id: `rec-${Date.now()}`,
+        name: recipeName,
+        yieldQty: parseFloat(yieldQty) || 1,
+        yieldUnit: yieldUnit,
+        salesPlu: salesPlu || `PLU-${Date.now().toString().slice(-3)}`,
+        retailPrice: parseFloat(retailPrice) || 0,
+        category: category,
+        ingredients: ingredientsLines.map((line) => {
+          const prod = products.find((p) => p.id === line.productId)!;
+          return {
+            productId: line.productId,
+            quantity: line.quantity,
+            unit: prod.stockingUnit,
+          };
+        }),
+        isActive: true,
+      };
 
-    setRecipes((prev) => [newRecipe, ...prev]);
+      setRecipes((prev) => [newRecipe, ...prev]);
+      alert('Recipe successfully created!');
+    }
 
     // Reset Form
     setRecipeName('');
@@ -203,14 +250,24 @@ export const AdminRecipes: React.FC<AdminRecipesProps> = ({
 
         <button
           id="btn-subtab-recipe-create"
-          onClick={() => setActiveTab('create')}
+          onClick={() => {
+            setEditingRecipeId(null);
+            setRecipeName('');
+            setYieldQty('1');
+            setYieldUnit('Serving');
+            setRetailPrice('');
+            setSalesPlu('');
+            setCategory('Mains');
+            setIngredientsLines([]);
+            setActiveTab('create');
+          }}
           className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
             activeTab === 'create'
               ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 border-gray-900'
               : 'bg-white dark:bg-gray-900 text-gray-500 border-gray-50 dark:border-gray-850 hover:bg-gray-50'
           }`}
         >
-          Build Recipe & Cost Modeling
+          {editingRecipeId ? 'Edit Active Recipe' : 'Build Recipe & Cost Modeling'}
         </button>
 
         <button
@@ -242,9 +299,18 @@ export const AdminRecipes: React.FC<AdminRecipesProps> = ({
                     <span className="text-[10px] font-bold uppercase tracking-widest bg-gray-50 dark:bg-gray-850 border px-2.5 py-0.5 rounded-full">
                       {recipe.category}
                     </span>
-                    <span className="font-mono text-[10px] text-gray-400">
-                      POS PLU: {recipe.salesPlu}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-gray-400">
+                        PLU: {recipe.salesPlu}
+                      </span>
+                      <button
+                        onClick={() => handleEditRecipeClick(recipe)}
+                        className="text-[10px] text-blue-500 font-extrabold hover:underline cursor-pointer border border-blue-100 bg-blue-50/30 px-1.5 py-0.5 rounded-md"
+                        title="Edit Recipe"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </div>
 
                   <h4 className="font-black text-sm text-gray-900 dark:text-white mb-2">{recipe.name}</h4>

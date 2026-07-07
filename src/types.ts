@@ -20,6 +20,8 @@ export interface Store {
   address: string;
   phone: string;
   isActive: boolean;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Allergen {

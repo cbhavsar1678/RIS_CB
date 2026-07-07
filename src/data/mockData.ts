@@ -15,9 +15,9 @@ export const ALLERGENS: Allergen[] = [
 ];
 
 export const INITIAL_STORES: Store[] = [
-  { id: 'st-downtown', name: 'Downtown Bistro', code: 'ST-DWTN', address: '456 Main Street, Financial District', phone: '555-0192', isActive: true },
-  { id: 'st-uptown', name: 'Uptown Kitchen & Bar', code: 'ST-UPTN', address: '789 Broadway Ave, Theater Row', phone: '555-0143', isActive: true },
-  { id: 'st-beachfront', name: 'Beachfront Grill', code: 'ST-BCHF', address: '12 Ocean Blvd, Seaside Walk', phone: '555-0188', isActive: true },
+  { id: 'st-downtown', name: 'Downtown Bistro', code: 'ST-DWTN', address: '456 Main Street, Financial District', phone: '555-0192', isActive: true, latitude: 40.7085, longitude: -74.0080 },
+  { id: 'st-uptown', name: 'Uptown Kitchen & Bar', code: 'ST-UPTN', address: '789 Broadway Ave, Theater Row', phone: '555-0143', isActive: true, latitude: 40.7590, longitude: -73.9845 },
+  { id: 'st-beachfront', name: 'Beachfront Grill', code: 'ST-BCHF', address: '12 Ocean Blvd, Seaside Walk', phone: '555-0188', isActive: true, latitude: 40.5750, longitude: -73.9820 },
 ];
 
 export const INITIAL_USERS: User[] = [
