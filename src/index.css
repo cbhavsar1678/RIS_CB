@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-bento-bg: #f8fafc;
+  --color-bento-card: #ffffff;
+  --color-bento-text: #1e293b;
+  --color-bento-accent: #3b82f6;
+  --color-bento-alert: #ef4444;
+  --color-bento-border: #e2e8f0;
+  --color-bento-success: #22c55e;
+}
+
+/* Base style resets to enforce Bento Grid Theme */
+body {
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+  background-color: #f8fafc;
+  color: #1e293b;
+}
+
+/* Ensure font-family applications are consistent */
+h1, h2, h3, .font-display {
+  font-family: "Space Grotesk", sans-serif !important;
+}
+
+.font-mono, code, pre, [id*="sku"] {
+  font-family: "JetBrains Mono", monospace !important;
+}
+
+/* Bento Card Overrides - rounded corners (16px), subtle borders, soft shadow */
+.card:not([class*="from-"]), 
+[class*="bg-white"][class*="rounded-3xl"]:not([class*="from-"]), 
+[class*="bg-white"][class*="rounded-2xl"]:not([class*="from-"]),
+[class*="dark:bg-gray-900"][class*="rounded-3xl"]:not([class*="from-"]),
+[class*="dark:bg-gray-900"][class*="rounded-2xl"]:not([class*="from-"]) {
+  border-radius: 16px !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+  background-color: #ffffff;
+  transition: all 0.2s ease-in-out;
+}
+
+/* Dark mode adjustments for cards */
+.dark .card:not([class*="from-"]),
+.dark [class*="bg-white"][class*="rounded-3xl"]:not([class*="from-"]),
+.dark [class*="bg-white"][class*="rounded-2xl"]:not([class*="from-"]),
+.dark [class*="dark:bg-gray-900"][class*="rounded-3xl"]:not([class*="from-"]),
+.dark [class*="dark:bg-gray-900"][class*="rounded-2xl"]:not([class*="from-"]) {
+  border-color: #1e293b !important;
+  background-color: #0f172a !important; /* Elegant dark slate background instead of generic gray */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Gradient card exceptions for rounded cornering */
+[class*="from-"][class*="rounded-"] {
+  border-radius: 16px !important;
+}
+
+/* Stat values formatting */
+.stat-value {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem; /* 24px */
+  color: #1e293b;
+}
+
+.dark .stat-value {
+  color: #f8fafc;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Global button refinements */
+button {
+  transition: all 0.15s ease-in-out;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+/* Sidebar design theme overrides */
+aside {
+  background-color: #ffffff !important;
+  border-right: 1px solid #e2e8f0 !important;
+}
+
+.dark aside {
+  background-color: #0f172a !important;
+  border-right: 1px solid #1e293b !important;
+}
+
+/* Navigation items active/inactive style override */
+[id^="btn-sidebar-nav-"] {
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  padding: 10px 14px !important;
+}
+
+[id^="btn-sidebar-nav-"][class*="bg-gray-900"],
+[id^="btn-sidebar-nav-"][class*="dark:bg-white"] {
+  background-color: #eff6ff !important;
+  color: #3b82f6 !important;
+  box-shadow: none !important;
+}
+
+.dark [id^="btn-sidebar-nav-"][class*="bg-gray-900"],
+.dark [id^="btn-sidebar-nav-"][class*="dark:bg-white"] {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  color: #60a5fa !important;
+  box-shadow: none !important;
+}
+
+/* Custom dual view top bar refinements */
+[class*="bg-gray-900"][class*="text-white"] {
+  background-color: #0f172a !important;
+  border-bottom: 1px solid #1e293b !important;
+}

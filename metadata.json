@@ -1,0 +1,6 @@
+{
+  "name": "Restaurant Inventory & Stock Management System",
+  "description": "A comprehensive, enterprise-grade multi-store restaurant inventory, recipe costing, batch production, supply chain, and stocktake system, integrated with an interactive front-of-house customer ordering web panel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
