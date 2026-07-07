@@ -148,61 +148,60 @@ app.post('/api/ai/scan-invoice', async (req, res) => {
 
 // 2. AI Area Calendar Events API
 app.post('/api/ai/area-events', async (req, res) => {
+  const { city = 'Downtown Area' } = req.body;
+  const mockEvents = [
+    {
+      id: 'evt-1',
+      name: 'Taylor Swift Weekend Eras Tour Concert',
+      date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 2 days from now
+      trafficMultiplier: 1.45,
+      impact: 'Extreme high-density pedestrian traffic near the central stadium. Dinner BOH shifts expect +45% diner counts.',
+      suggestions: [
+        { type: 'stock', productId: 'prod-milk', label: 'Restock Organic Whole Milk for morning lattes', value: '+30% stock' },
+        { type: 'recipe', recipeId: 'rec-dough', label: 'Pre-batch extra Pizza Dough (Prep 2 extra bins)', value: '+40% volume' },
+        { type: 'staff', label: 'Schedule 2 extra line cooks & double FOH runners for Friday/Saturday night shift', value: 'Double Shift' }
+      ]
+    },
+    {
+      id: 'evt-2',
+      name: 'Summer Street Food & Craft Beer Festival',
+      date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 5 days from now
+      trafficMultiplier: 1.30,
+      impact: 'Outdoor festival crowd searching for craft beverages and portable small bites. High dinner takeout demand.',
+      suggestions: [
+        { type: 'stock', productId: 'prod-salmon', label: 'Increase Atlantic Salmon prep portions for festival goers', value: '+20% stock' },
+        { type: 'recipe', recipeId: 'rec-sauce', label: 'Prepare extra batches of Marinara Sauce (20L)', value: '+25% volume' }
+      ]
+    },
+    {
+      id: 'evt-3',
+      name: 'Severe Rainstorm & Cold Temperature Front',
+      date: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 8 days from now
+      trafficMultiplier: 0.85,
+      impact: 'Substantial dip in outdoor dining/foot traffic, but sharp increase in home delivery orders (+35%). Warm dishes and beverages spike.',
+      suggestions: [
+        { type: 'stock', productId: 'prod-beef', label: 'Maintain protein stock but prepare warmer stew items', value: 'High delivery' },
+        { type: 'packaging', label: 'Secure additional delivery cardboard containers and heat bags', value: '+50% Packaging' }
+      ]
+    },
+    {
+      id: 'evt-4',
+      name: 'Annual Downtown Pride Parade',
+      date: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 12 days from now
+      trafficMultiplier: 1.60,
+      impact: 'Parade runs right past the main avenue locations. Lunch and mid-afternoon rush will be exceptionally busy (+60%).',
+      suggestions: [
+        { type: 'stock', productId: 'prod-beverage', label: 'Max out refrigerated beverage stocking rails', value: '+60% stock' },
+        { type: 'recipe', label: 'Prepare simple grab-and-go snack items for expedited lines', value: 'Fast Service' }
+      ]
+    }
+  ];
+
   try {
-    const { city = 'Downtown Area' } = req.body;
     const ai = getGeminiClient();
 
     if (!ai) {
       console.log('Using simulated local AI Calendar (No GEMINI_API_KEY set)');
-      // Return premium high-fidelity local events
-      const mockEvents = [
-        {
-          id: 'evt-1',
-          name: 'Taylor Swift Weekend Eras Tour Concert',
-          date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 2 days from now
-          trafficMultiplier: 1.45,
-          impact: 'Extreme high-density pedestrian traffic near the central stadium. Dinner BOH shifts expect +45% diner counts.',
-          suggestions: [
-            { type: 'stock', productId: 'prod-milk', label: 'Restock Organic Whole Milk for morning lattes', value: '+30% stock' },
-            { type: 'recipe', recipeId: 'rec-dough', label: 'Pre-batch extra Pizza Dough (Prep 2 extra bins)', value: '+40% volume' },
-            { type: 'staff', label: 'Schedule 2 extra line cooks & double FOH runners for Friday/Saturday night shift', value: 'Double Shift' }
-          ]
-        },
-        {
-          id: 'evt-2',
-          name: 'Summer Street Food & Craft Beer Festival',
-          date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 5 days from now
-          trafficMultiplier: 1.30,
-          impact: 'Outdoor festival crowd searching for craft beverages and portable small bites. High dinner takeout demand.',
-          suggestions: [
-            { type: 'stock', productId: 'prod-salmon', label: 'Increase Atlantic Salmon prep portions for festival goers', value: '+20% stock' },
-            { type: 'recipe', recipeId: 'rec-sauce', label: 'Prepare extra batches of Marinara Sauce (20L)', value: '+25% volume' }
-          ]
-        },
-        {
-          id: 'evt-3',
-          name: 'Severe Rainstorm & Cold Temperature Front',
-          date: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 8 days from now
-          trafficMultiplier: 0.85,
-          impact: 'Substantial dip in outdoor dining/foot traffic, but sharp increase in home delivery orders (+35%). Warm dishes and beverages spike.',
-          suggestions: [
-            { type: 'stock', productId: 'prod-beef', label: 'Maintain protein stock but prepare warmer stew items', value: 'High delivery' },
-            { type: 'packaging', label: 'Secure additional delivery cardboard containers and heat bags', value: '+50% Packaging' }
-          ]
-        },
-        {
-          id: 'evt-4',
-          name: 'Annual Downtown Pride Parade',
-          date: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 12 days from now
-          trafficMultiplier: 1.60,
-          impact: 'Parade runs right past the main avenue locations. Lunch and mid-afternoon rush will be exceptionally busy (+60%).',
-          suggestions: [
-            { type: 'stock', productId: 'prod-beverage', label: 'Max out refrigerated beverage stocking rails', value: '+60% stock' },
-            { type: 'recipe', label: 'Prepare simple grab-and-go snack items for expedited lines', value: 'Fast Service' }
-          ]
-        }
-      ];
-
       return res.json({
         success: true,
         source: 'Mock Local AI',
@@ -231,26 +230,41 @@ app.post('/api/ai/area-events', async (req, res) => {
       ]
     }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json'
-      }
-    });
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
 
-    const dataText = response.text || '{}';
-    const parsedData = JSON.parse(dataText.trim());
+      const dataText = response.text || '{}';
+      const parsedData = JSON.parse(dataText.trim());
 
-    return res.json({
-      success: true,
-      source: 'Gemini AI',
-      ...parsedData
-    });
+      return res.json({
+        success: true,
+        source: 'Gemini AI',
+        ...parsedData
+      });
+    } catch (apiError: any) {
+      console.warn('Gemini API call or JSON parsing failed, falling back to mock events. Error:', apiError);
+      return res.json({
+        success: true,
+        source: 'Mock Local AI (Gemini Unavailable)',
+        city,
+        events: mockEvents
+      });
+    }
 
   } catch (error: any) {
-    console.error('Area events forecasting error:', error);
-    res.status(500).json({ success: false, error: error.message || 'Error processing area event forecasting' });
+    console.error('Area events forecasting outer error:', error);
+    return res.json({
+      success: true,
+      source: 'Mock Local AI (Fallback)',
+      city,
+      events: mockEvents
+    });
   }
 });
 
