@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { ShoppingCart, FileText, CheckCircle, XCircle, ArrowLeftRight, Truck, Plus, Trash2, ShieldAlert } from 'lucide-react';
+import { ShoppingCart, FileText, CheckCircle, XCircle, ArrowLeftRight, Truck, Plus, Trash2, ShieldAlert, Sparkles, QrCode } from 'lucide-react';
 import { PurchaseOrder, Supplier, Product, Store, Inventory } from '../../types';
 
 interface AdminOrdersProps {
@@ -14,6 +14,7 @@ interface AdminOrdersProps {
   products: Product[];
   stores: Store[];
   setInventories: React.Dispatch<React.SetStateAction<Inventory[]>>;
+  inventories: Inventory[];
 }
 
 export const AdminOrders: React.FC<AdminOrdersProps> = ({
@@ -23,6 +24,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
   products,
   stores,
   setInventories,
+  inventories,
 }) => {
   const [activeTab, setActiveTab] = useState<'create' | 'approve' | 'deliveries' | 'returns' | 'scan'>('approve');
 
@@ -37,6 +39,56 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
   // Live Camera Scanner States
   const [showCameraView, setShowCameraView] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // QR Code Scanner States
+  const [scanMode, setScanMode] = useState<'invoice' | 'qrcode'>('invoice');
+  const [qrScannedResult, setQrScannedResult] = useState<{
+    productId: string;
+    productName: string;
+    quantity: number;
+    batchNumber: string;
+    expiryDate: string;
+    supplierName: string;
+  } | null>(null);
+  const [isQrScanning, setIsQrScanning] = useState(false);
+  const [showQrCameraView, setShowQrCameraView] = useState(false);
+
+  const handleQrScanPreset = (preset: {
+    productId: string;
+    productName: string;
+    quantity: number;
+    batchNumber: string;
+    expiryDate: string;
+    supplierName: string;
+  }) => {
+    setIsQrScanning(true);
+    setQrScannedResult(null);
+    setTimeout(() => {
+      setQrScannedResult(preset);
+      setIsQrScanning(false);
+      alert(`Beep! Decoded delivery QR code successfully. Identified ingredient: "${preset.productName}"`);
+    }, 1000);
+  };
+
+  const handleIngestQrDelivery = () => {
+    if (!qrScannedResult) return;
+    
+    // Deduct/Increase stock in inventories
+    setInventories((prev) =>
+      prev.map((inv) => {
+        if (inv.storeId === selectedScanStoreId && inv.productId === qrScannedResult.productId) {
+          return {
+            ...inv,
+            theoreticalStock: inv.theoreticalStock + qrScannedResult.quantity,
+          };
+        }
+        return inv;
+      })
+    );
+
+    alert(`Success! Checked in ${qrScannedResult.quantity} units of "${qrScannedResult.productName}" into inventory. Batch trace logged under #${qrScannedResult.batchNumber}`);
+    setQrScannedResult(null);
+  };
 
   const startInvoiceCamera = async () => {
     setCameraError(null);
@@ -194,6 +246,37 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
 
   const handleRemoveLine = (idx: number) => {
     setPoLines(poLines.filter((_, i) => i !== idx));
+  };
+
+  const handleAutoSuggestRestock = () => {
+    const suggested: { productId: string; quantity: number }[] = [];
+    const vendorProds = products.filter(p => p.supplierId === selectedSupplierId && !p.isArchived);
+    
+    vendorProds.forEach(prod => {
+      const inv = inventories.find(i => i.productId === prod.id && i.storeId === selectedStoreId);
+      if (inv) {
+        if (inv.theoreticalStock <= inv.reorderPoint) {
+          const deficit = Math.max(0, inv.parLevel - inv.theoreticalStock);
+          if (deficit > 0) {
+            const packsNeeded = Math.ceil(deficit / prod.unitsPerPackage);
+            if (packsNeeded > 0) {
+              suggested.push({
+                productId: prod.id,
+                quantity: packsNeeded
+              });
+            }
+          }
+        }
+      }
+    });
+    
+    if (suggested.length === 0) {
+      alert("All products for this vendor are currently well-stocked above reorder safety limits at this location. No automatic reorders suggested!");
+      return;
+    }
+    
+    setPoLines(suggested);
+    alert(`Success! Auto-suggested ${suggested.length} replenishment lines based on low inventory & safety par levels at this branch.`);
   };
 
   const calculatePoTotal = () => {
@@ -521,14 +604,24 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
           <div className="space-y-4 mb-6">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">PO Line Items</h4>
-              <button
-                id="btn-po-add-line"
-                type="button"
-                onClick={handleAddLine}
-                className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-750 text-gray-700 dark:text-gray-300 font-bold px-3 py-1.5 rounded-xl text-xs cursor-pointer"
-              >
-                <Plus size={12} /> Add Line SKU
-              </button>
+              <div className="flex gap-2">
+                <button
+                  id="btn-po-auto-suggest"
+                  type="button"
+                  onClick={handleAutoSuggestRestock}
+                  className="flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border border-indigo-150 dark:border-indigo-900/40 font-bold px-3 py-1.5 rounded-xl text-xs cursor-pointer transition-colors"
+                >
+                  <Sparkles size={12} className="animate-pulse" /> Auto-Suggest Restock
+                </button>
+                <button
+                  id="btn-po-add-line"
+                  type="button"
+                  onClick={handleAddLine}
+                  className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-750 text-gray-700 dark:text-gray-300 font-bold px-3 py-1.5 rounded-xl text-xs cursor-pointer"
+                >
+                  <Plus size={12} /> Add Line SKU
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -847,399 +940,613 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({
       {/* AI INVOICE SCANNING & PARSING WORKFLOW */}
       {activeTab === 'scan' && (
         <div className="space-y-6">
-          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-850 rounded-3xl p-6 shadow-sm">
-            <h3 className="text-base font-extrabold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
-              <span className="p-1.5 bg-blue-500/10 text-blue-500 rounded-lg">📄</span>
-              AI Invoice Parser & Automatic Stock Ingestion
-            </h3>
-            <p className="text-xs text-gray-400 dark:text-gray-500 max-w-2xl mb-6">
-              Paste raw invoice receipts, delivery slips, or select one of our ready-made restaurant vendor presets. The AI will extract line-item parameters, match products, and let you review counts before instant inventory increase.
-            </p>
+          {/* Scan Mode Selector Switcher */}
+          <div className="flex gap-2">
+            <button
+              id="btn-scan-mode-invoice"
+              onClick={() => setScanMode('invoice')}
+              className={`px-4 py-2 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                scanMode === 'invoice'
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/15'
+                  : 'bg-white dark:bg-gray-900 text-gray-500 border-gray-100 dark:border-gray-850 hover:bg-gray-50'
+              }`}
+            >
+              📄 Paper Invoice OCR Scan
+            </button>
+            <button
+              id="btn-scan-mode-qrcode"
+              onClick={() => setScanMode('qrcode')}
+              className={`px-4 py-2 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                scanMode === 'qrcode'
+                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/15'
+                  : 'bg-white dark:bg-gray-900 text-gray-500 border-gray-100 dark:border-gray-850 hover:bg-gray-50'
+              }`}
+            >
+              <QrCode size={13} className="inline mr-1" /> QR Case Laser Scanner
+            </button>
+          </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Column: Preset select & Paste Area */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-2">Select Ready-Made Presets</label>
-                  <div className="grid grid-cols-1 gap-2">
-                    {[
-                      {
-                        title: "🥩 Meat Masters Beef Delivery Invoice",
-                        text: "INVOICE #INV-MEAT-4229\nDate: 2026-07-06\nSupplier: Meat Masters Inc.\nItems:\n- Wagyu Beef Ribeye: 5 cases @ $280.00 each\n- Chicken Breast Tenderloin: 2 cases @ $65.00 each\nTotal Amount: $1530.00\nTax: $0.00"
-                      },
-                      {
-                        title: "🥬 Produce Farm Veg-Supply Invoice",
-                        text: "INVOICE #INV-VEG-9981\nDate: 2026-07-07\nSupplier: Quality Produce Co.\nItems:\n- Romaine Lettuce Heads: 10 boxes @ $12.50 each\n- Fresh Roma Tomatoes: 8 boxes @ $15.00 each\n- Yellow Onions Sweet: 3 bags @ $9.00 each\nTotal Amount: $272.00"
-                      },
-                      {
-                        title: "🥛 Dairy Farm Fresh Consolidated Delivery",
-                        text: "INVOICE #INV-DAIRY-8839\nDate: 2026-07-07\nSupplier: Dairy Fresh Farms\nItems:\n- Whole Milk (Organic): 12 cases @ $32.00 each\n- Premium Heavy Cream: 4 cases @ $41.50 each\nTotal Amount: $550.00"
-                      }
-                    ].map((preset, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setInvoiceInputText(preset.text);
-                        }}
-                        className="text-left text-xs bg-gray-50 dark:bg-gray-850 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 border border-gray-100 dark:border-gray-800 p-3 rounded-xl cursor-pointer font-semibold transition-colors flex items-center justify-between"
-                      >
-                        <span>{preset.title}</span>
-                        <span className="text-[10px] text-blue-500 hover:underline">Apply preset</span>
-                      </button>
-                    ))}
+          {scanMode === 'invoice' && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-850 rounded-3xl p-6 shadow-sm">
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
+                <span className="p-1.5 bg-blue-500/10 text-blue-500 rounded-lg">📄</span>
+                AI Invoice Parser & Automatic Stock Ingestion
+              </h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 max-w-2xl mb-6">
+                Paste raw invoice receipts, delivery slips, or select one of our ready-made restaurant vendor presets. The AI will extract line-item parameters, match products, and let you review counts before instant inventory increase.
+              </p>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column: Preset select & Paste Area */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-2">Select Ready-Made Presets</label>
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        {
+                          title: "🥩 Meat Masters Beef Delivery Invoice",
+                          text: "INVOICE #INV-MEAT-4229\nDate: 2026-07-06\nSupplier: Meat Masters Inc.\nItems:\n- Wagyu Beef Ribeye: 5 cases @ $280.00 each\n- Chicken Breast Tenderloin: 2 cases @ $65.00 each\nTotal Amount: $1530.00\nTax: $0.00"
+                        },
+                        {
+                          title: "🥬 Produce Farm Veg-Supply Invoice",
+                          text: "INVOICE #INV-VEG-9981\nDate: 2026-07-07\nSupplier: Quality Produce Co.\nItems:\n- Romaine Lettuce Heads: 10 boxes @ $12.50 each\n- Fresh Roma Tomatoes: 8 boxes @ $15.00 each\n- Yellow Onions Sweet: 3 bags @ $9.00 each\nTotal Amount: $272.00"
+                        },
+                        {
+                          title: "🥛 Dairy Farm Fresh Consolidated Delivery",
+                          text: "INVOICE #INV-DAIRY-8839\nDate: 2026-07-07\nSupplier: Dairy Fresh Farms\nItems:\n- Whole Milk (Organic): 12 cases @ $32.00 each\n- Premium Heavy Cream: 4 cases @ $41.50 each\nTotal Amount: $550.00"
+                        }
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setInvoiceInputText(preset.text);
+                          }}
+                          className="text-left text-xs bg-gray-50 dark:bg-gray-850 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 border border-gray-100 dark:border-gray-800 p-3 rounded-xl cursor-pointer font-semibold transition-colors flex items-center justify-between"
+                        >
+                          <span>{preset.title}</span>
+                          <span className="text-[10px] text-blue-500 hover:underline">Apply preset</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                {/* File/Image Upload Dropzone */}
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-2">Or Upload Invoice Image (Drag-and-Drop / Browse)</label>
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsDragging(true);
-                    }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                        handleFileUpload(e.dataTransfer.files[0]);
-                      }
-                    }}
-                    className={`border-2 border-dashed rounded-2xl p-5 text-center flex flex-col items-center justify-center transition-all ${
-                      isDragging 
-                        ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/20' 
-                        : 'border-gray-200 dark:border-gray-800 hover:border-blue-500/50 hover:bg-gray-50/50 bg-gray-50/25 dark:bg-gray-900/10'
-                    }`}
-                  >
-                    <span className="text-2xl mb-1.5">📸</span>
-                    <strong className="text-xs font-extrabold text-gray-700 dark:text-gray-300">
-                      Drag & Drop Invoice Image
-                    </strong>
-                    <span className="text-[10px] text-gray-400 block mt-0.5 mb-3">
-                      Accepts JPEG, PNG, WEBP files
-                    </span>
-
-                    <label className="bg-blue-500 hover:bg-blue-600 text-white font-extrabold px-3 py-1.5 rounded-xl text-[10px] cursor-pointer transition-all shadow-sm">
-                      Browse Files
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleFileUpload(e.target.files[0]);
-                          }
-                        }}
-                      />
-                    </label>
-
-                    <button
-                      id="btn-trigger-camera-scan"
-                      type="button"
-                      onClick={startInvoiceCamera}
-                      className="mt-2.5 bg-indigo-500 hover:bg-indigo-600 text-white font-extrabold px-3 py-1.5 rounded-xl text-[10px] cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
+                  {/* File/Image Upload Dropzone */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-2">Or Upload Invoice Image (Drag-and-Drop / Browse)</label>
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsDragging(true);
+                      }}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          handleFileUpload(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      className={`border-2 border-dashed rounded-2xl p-5 text-center flex flex-col items-center justify-center transition-all ${
+                        isDragging 
+                          ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/20' 
+                          : 'border-gray-200 dark:border-gray-800 hover:border-blue-500/50 hover:bg-gray-50/50 bg-gray-50/25 dark:bg-gray-900/10'
+                      }`}
                     >
-                      📷 Use Mobile Camera Scanner
-                    </button>
+                      <span className="text-2xl mb-1.5">📸</span>
+                      <strong className="text-xs font-extrabold text-gray-700 dark:text-gray-300">
+                        Drag & Drop Invoice Image
+                      </strong>
+                      <span className="text-[10px] text-gray-400 block mt-0.5 mb-3">
+                        Accepts JPEG, PNG, WEBP files
+                      </span>
 
-                    {showCameraView && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md">
-                        <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center">
-                          <div className="w-full flex justify-between items-center mb-4 border-b border-slate-800 pb-2.5">
-                            <h4 className="text-xs font-black text-white flex items-center gap-1.5">
-                              <span>📷</span> LIVE INVOICE SCANNER VIEW
-                            </h4>
-                            <button
-                              type="button"
-                              onClick={stopInvoiceCamera}
-                              className="text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 cursor-pointer"
-                            >
-                              ✕
-                            </button>
-                          </div>
+                      <label className="bg-blue-500 hover:bg-blue-600 text-white font-extrabold px-3 py-1.5 rounded-xl text-[10px] cursor-pointer transition-all shadow-sm">
+                        Browse Files
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleFileUpload(e.target.files[0]);
+                            }
+                          }}
+                        />
+                      </label>
 
-                          <p className="text-[10px] text-slate-400 mb-4 leading-relaxed">
-                            Position the printed or digital invoice inside the camera framing guidelines. AI OCR extracts prices and items automatically.
-                          </p>
+                      <button
+                        id="btn-trigger-camera-scan"
+                        type="button"
+                        onClick={startInvoiceCamera}
+                        className="mt-2.5 bg-indigo-500 hover:bg-indigo-600 text-white font-extrabold px-3 py-1.5 rounded-xl text-[10px] cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
+                      >
+                        📷 Use Mobile Camera Scanner
+                      </button>
 
-                          {/* Camera Container Frame */}
-                          <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-inner flex items-center justify-center mb-5">
-                            <video 
-                              id="invoice-scanner-video" 
-                              className={`w-full h-full object-cover ${cameraError ? 'hidden' : 'block'}`}
-                              playsInline 
-                              muted 
-                            />
-
-                            {/* Framing Box & Scanline Laser */}
-                            <div className="absolute inset-4 border-2 border-dashed border-indigo-500/50 rounded-xl pointer-events-none flex items-center justify-center">
-                              <div className="absolute top-0 inset-x-0 h-0.5 bg-indigo-500 shadow-[0_0_8px_#6366f1] animate-bounce" />
-                              
-                              {/* Overlay alignment corners */}
-                              <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-indigo-500 rounded-tl-sm" />
-                              <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-indigo-500 rounded-tr-sm" />
-                              <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-indigo-500 rounded-bl-sm" />
-                              <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-indigo-500 rounded-br-sm" />
+                      {showCameraView && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md">
+                          <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center">
+                            <div className="w-full flex justify-between items-center mb-4 border-b border-slate-800 pb-2.5">
+                              <h4 className="text-xs font-black text-white flex items-center gap-1.5">
+                                <span>📷</span> LIVE INVOICE SCANNER VIEW
+                              </h4>
+                              <button
+                                type="button"
+                                onClick={stopInvoiceCamera}
+                                className="text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 cursor-pointer"
+                              >
+                                ✕
+                              </button>
                             </div>
 
-                            {cameraError && (
-                              <div className="p-4 space-y-3.5 text-center">
-                                <span className="text-2xl">⚡</span>
-                                <h5 className="text-xs font-bold text-amber-500">Iframe Sandbox Capture Mode</h5>
-                                <p className="text-[9px] text-slate-500 max-w-xs leading-normal">
-                                  {cameraError}
-                                </p>
-                                <div className="bg-slate-850 p-3 rounded-xl border border-slate-800 text-left space-y-1 max-w-[280px] mx-auto">
-                                  <span className="text-[8px] font-black uppercase text-indigo-400 block">Simulated Paper Invoice</span>
-                                  <div className="text-[9px] text-slate-300 font-mono space-y-0.5">
-                                    <div>US FOODS DISTRIBUTION CENTRE</div>
-                                    <div>Ref: INV-992-881 | Date: Jul 07</div>
-                                    <div className="text-emerald-500 font-bold">• 5x Wagyu Ribeye @ $85.00</div>
-                                    <div className="text-emerald-500 font-bold">• 10x Organic Milk @ $7.00</div>
+                            <p className="text-[10px] text-slate-400 mb-4 leading-relaxed">
+                              Position the printed or digital invoice inside the camera framing guidelines. AI OCR extracts prices and items automatically.
+                            </p>
+
+                            {/* Camera Container Frame */}
+                            <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-inner flex items-center justify-center mb-5">
+                              <video 
+                                id="invoice-scanner-video" 
+                                className={`w-full h-full object-cover ${cameraError ? 'hidden' : 'block'}`}
+                                playsInline 
+                                muted 
+                              />
+
+                              {/* Framing Box & Scanline Laser */}
+                              <div className="absolute inset-4 border-2 border-dashed border-indigo-500/50 rounded-xl pointer-events-none flex items-center justify-center">
+                                <div className="absolute top-0 inset-x-0 h-0.5 bg-indigo-500 shadow-[0_0_8px_#6366f1] animate-bounce" />
+                                
+                                {/* Overlay alignment corners */}
+                                <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-indigo-500 rounded-tl-sm" />
+                                <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-indigo-500 rounded-tr-sm" />
+                                <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-indigo-500 rounded-bl-sm" />
+                                <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-indigo-500 rounded-br-sm" />
+                              </div>
+
+                              {cameraError && (
+                                <div className="p-4 space-y-3.5 text-center">
+                                  <span className="text-2xl">⚡</span>
+                                  <h5 className="text-xs font-bold text-amber-500">Iframe Sandbox Capture Mode</h5>
+                                  <p className="text-[9px] text-slate-500 max-w-xs leading-normal">
+                                    {cameraError}
+                                  </p>
+                                  <div className="bg-slate-850 p-3 rounded-xl border border-slate-800 text-left space-y-1 max-w-[280px] mx-auto">
+                                    <span className="text-[8px] font-black uppercase text-indigo-400 block">Simulated Paper Invoice</span>
+                                    <div className="text-[9px] text-slate-300 font-mono space-y-0.5">
+                                      <div>US FOODS DISTRIBUTION CENTRE</div>
+                                      <div>Ref: INV-992-881 | Date: Jul 07</div>
+                                      <div className="text-emerald-500 font-bold">• 5x Wagyu Ribeye @ $85.00</div>
+                                      <div className="text-emerald-500 font-bold">• 10x Organic Milk @ $7.00</div>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )}
-                          </div>
+                              )}
+                            </div>
 
-                          <div className="flex gap-3 w-full">
-                            <button
-                              type="button"
-                              onClick={stopInvoiceCamera}
-                              className="flex-1 bg-slate-800 hover:bg-slate-750 text-slate-400 font-bold py-2 rounded-xl text-[10px] cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                            {cameraError ? (
+                            <div className="flex gap-3 w-full">
                               <button
                                 type="button"
-                                onClick={simulateCameraScan}
-                                className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-black py-2 rounded-xl text-[10px] cursor-pointer shadow-md shadow-indigo-500/10"
+                                onClick={stopInvoiceCamera}
+                                className="flex-1 bg-slate-800 hover:bg-slate-750 text-slate-400 font-bold py-2 rounded-xl text-[10px] cursor-pointer"
                               >
-                                Simulate Scan
+                                Cancel
                               </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={captureInvoiceSnapshot}
-                                className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-black py-2 rounded-xl text-[10px] cursor-pointer shadow-md shadow-indigo-500/10"
-                              >
-                                Capture Snapshot
-                              </button>
-                            )}
+                              {cameraError ? (
+                                <button
+                                  type="button"
+                                  onClick={simulateCameraScan}
+                                  className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-black py-2 rounded-xl text-[10px] cursor-pointer shadow-md shadow-indigo-500/10"
+                                >
+                                  Simulate Scan
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={captureInvoiceSnapshot}
+                                  className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-black py-2 rounded-xl text-[10px] cursor-pointer shadow-md shadow-indigo-500/10"
+                                >
+                                  Capture Snapshot
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-
-                    {uploadProgress !== null && (
-                      <div className="w-full max-w-xs mt-3.5 space-y-1">
-                        <div className="flex justify-between text-[9px] font-bold text-gray-500">
-                          <span>Reading image data...</span>
-                          <span>{uploadProgress}%</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                          <div 
-                            className="bg-blue-500 h-full transition-all duration-300"
-                            style={{ width: `${uploadProgress}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-2">Or Paste Raw Invoice Text / OCR Dump</label>
-                  <textarea
-                    id="textarea-invoice-raw"
-                    value={invoiceInputText}
-                    onChange={(e) => setInvoiceInputText(e.target.value)}
-                    placeholder="Paste invoice line-items here..."
-                    rows={8}
-                    className="w-full bg-gray-50 dark:bg-gray-850 border border-gray-100 dark:border-gray-800 rounded-2xl px-4 py-3 text-xs focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div className="flex gap-4 items-center">
-                  <div className="flex-1">
-                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1.5">Destination Store Outlet</label>
-                    <select
-                      id="select-scan-store"
-                      value={selectedScanStoreId}
-                      onChange={(e) => setSelectedScanStoreId(e.target.value)}
-                      className="w-full bg-gray-50 dark:bg-gray-850 border border-gray-100 dark:border-gray-800 rounded-xl px-2.5 py-2 text-xs focus:outline-none font-bold text-gray-700 dark:text-gray-300"
-                    >
-                      {stores.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          📍 {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="pt-5 shrink-0">
-                    <button
-                      id="btn-trigger-ai-scan"
-                      type="button"
-                      disabled={!invoiceInputText.trim() || isScanning}
-                      onClick={() => handleScanInvoice(invoiceInputText)}
-                      className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-black px-6 py-2.5 rounded-xl text-xs shadow-md shadow-blue-500/10 cursor-pointer transition-all flex items-center gap-2"
-                    >
-                      {isScanning ? (
-                        <>
-                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Parsing with Gemini...
-                        </>
-                      ) : (
-                        "🚀 Trigger AI Scan"
                       )}
-                    </button>
+
+                      {uploadProgress !== null && (
+                        <div className="w-full max-w-xs mt-3.5 space-y-1">
+                          <div className="flex justify-between text-[9px] font-bold text-gray-500">
+                            <span>Reading image data...</span>
+                            <span>{uploadProgress}%</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-850 rounded-full overflow-hidden">
+                            <div 
+                              className="bg-blue-500 h-full transition-all duration-300"
+                              style={{ width: `${uploadProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-2">Or Paste Raw Invoice Text / OCR Dump</label>
+                    <textarea
+                      id="textarea-invoice-raw"
+                      value={invoiceInputText}
+                      onChange={(e) => setInvoiceInputText(e.target.value)}
+                      placeholder="Paste invoice line-items here..."
+                      rows={8}
+                      className="w-full bg-gray-50 dark:bg-gray-850 border border-gray-100 dark:border-gray-800 rounded-2xl px-4 py-3 text-xs focus:outline-none font-mono"
+                    />
+                  </div>
+
+                  <div className="flex gap-4 items-center">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1.5">Destination Store Outlet</label>
+                      <select
+                        id="select-scan-store"
+                        value={selectedScanStoreId}
+                        onChange={(e) => setSelectedScanStoreId(e.target.value)}
+                        className="w-full bg-gray-50 dark:bg-gray-850 border border-gray-100 dark:border-gray-800 rounded-xl px-2.5 py-2 text-xs focus:outline-none font-bold text-gray-700 dark:text-gray-300"
+                      >
+                        {stores.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            📍 {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="pt-5 shrink-0">
+                      <button
+                        id="btn-trigger-ai-scan"
+                        type="button"
+                        disabled={!invoiceInputText.trim() || isScanning}
+                        onClick={() => handleScanInvoice(invoiceInputText)}
+                        className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-black px-6 py-2.5 rounded-xl text-xs shadow-md shadow-blue-500/10 cursor-pointer transition-all flex items-center gap-2"
+                      >
+                        {isScanning ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Parsing with Gemini...
+                          </>
+                        ) : (
+                          "🚀 Trigger AI Scan"
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Right Column: AI Extraction Review Grid */}
-              <div className="border border-gray-100 dark:border-gray-850 p-5 rounded-2xl bg-gray-50/20 dark:bg-gray-950/20 flex flex-col justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Review AI Extraction Results</h4>
+                {/* Right Column: AI Extraction Review Grid */}
+                <div className="border border-gray-100 dark:border-gray-850 p-5 rounded-2xl bg-gray-50/20 dark:bg-gray-950/20 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Review AI Extraction Results</h4>
 
-                  {scannedResult ? (
-                    <div className="space-y-4">
-                      {/* Meta parameters */}
-                      <div className="grid grid-cols-2 gap-3 bg-white dark:bg-gray-900 border p-3 rounded-xl text-xs">
-                        <div>
-                          <div className="text-[9px] uppercase font-bold text-gray-400">Supplier Match</div>
-                          <input
-                            type="text"
-                            value={scannedResult.vendor}
-                            onChange={(e) => setScannedResult({ ...scannedResult, vendor: e.target.value })}
-                            className="font-bold text-gray-800 dark:text-white bg-transparent border-b focus:outline-none w-full mt-0.5"
-                          />
+                    {scannedResult ? (
+                      <div className="space-y-4">
+                        {/* Meta parameters */}
+                        <div className="grid grid-cols-2 gap-3 bg-white dark:bg-gray-900 border p-3 rounded-xl text-xs">
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-gray-400">Supplier Match</div>
+                            <input
+                              type="text"
+                              value={scannedResult.vendor}
+                              onChange={(e) => setScannedResult({ ...scannedResult, vendor: e.target.value })}
+                              className="font-bold text-gray-800 dark:text-white bg-transparent border-b focus:outline-none w-full mt-0.5"
+                            />
+                          </div>
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-gray-400">Invoice Reference #</div>
+                            <input
+                              type="text"
+                              value={scannedResult.invoiceNumber}
+                              onChange={(e) => setScannedResult({ ...scannedResult, invoiceNumber: e.target.value })}
+                              className="font-bold text-gray-800 dark:text-white bg-transparent border-b focus:outline-none w-full mt-0.5"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-[9px] uppercase font-bold text-gray-400">Invoice Reference #</div>
-                          <input
-                            type="text"
-                            value={scannedResult.invoiceNumber}
-                            onChange={(e) => setScannedResult({ ...scannedResult, invoiceNumber: e.target.value })}
-                            className="font-bold text-gray-800 dark:text-white bg-transparent border-b focus:outline-none w-full mt-0.5"
-                          />
-                        </div>
-                      </div>
 
-                      {/* Items table */}
-                      <div className="border rounded-xl overflow-hidden bg-white dark:bg-gray-900">
-                        <table className="w-full text-[11px] text-left">
-                          <thead className="bg-gray-50 dark:bg-gray-850 text-[9px] uppercase font-bold text-gray-400 border-b">
-                            <tr>
-                              <th className="px-3 py-2">Parsed Product</th>
-                              <th className="px-3 py-2 text-center">Qty</th>
-                              <th className="px-3 py-2 text-right">Unit cost</th>
-                              <th className="px-3 py-2 text-right">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {scannedResult.items.map((item: any, idx: number) => (
-                              <tr key={idx}>
-                                <td className="px-3 py-2.5">
-                                  <input
-                                    type="text"
-                                    value={item.name}
-                                    onChange={(e) => {
-                                      const updatedItems = [...scannedResult.items];
-                                      updatedItems[idx].name = e.target.value;
-                                      setScannedResult({ ...scannedResult, items: updatedItems });
-                                    }}
-                                    className="font-bold text-gray-800 dark:text-white bg-transparent border-b border-transparent focus:border-gray-200 focus:outline-none w-full"
-                                  />
-                                </td>
-                                <td className="px-3 py-2.5 text-center">
-                                  <input
-                                    type="number"
-                                    value={item.quantity}
-                                    onChange={(e) => {
-                                      const val = parseFloat(e.target.value) || 0;
-                                      const updatedItems = [...scannedResult.items];
-                                      updatedItems[idx].quantity = val;
-                                      updatedItems[idx].totalCost = val * item.unitCost;
-                                      setScannedResult({
-                                        ...scannedResult,
-                                        items: updatedItems,
-                                        totalAmount: updatedItems.reduce((acc, curr) => acc + curr.totalCost, 0)
-                                      });
-                                    }}
-                                    className="text-center font-semibold text-gray-800 dark:text-white bg-transparent border-b border-transparent focus:border-gray-200 focus:outline-none w-10"
-                                  />
-                                </td>
-                                <td className="px-3 py-2.5 text-right">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={item.unitCost}
-                                    onChange={(e) => {
-                                      const val = parseFloat(e.target.value) || 0;
-                                      const updatedItems = [...scannedResult.items];
-                                      updatedItems[idx].unitCost = val;
-                                      updatedItems[idx].totalCost = item.quantity * val;
-                                      setScannedResult({
-                                        ...scannedResult,
-                                        items: updatedItems,
-                                        totalAmount: updatedItems.reduce((acc, curr) => acc + curr.totalCost, 0)
-                                      });
-                                    }}
-                                    className="text-right font-semibold text-gray-800 dark:text-white bg-transparent border-b border-transparent focus:border-gray-200 focus:outline-none w-12"
-                                  />
-                                </td>
-                                <td className="px-3 py-2.5 text-right font-mono font-bold">
-                                  ${item.totalCost.toFixed(2)}
-                                </td>
+                        {/* Items table */}
+                        <div className="border rounded-xl overflow-hidden bg-white dark:bg-gray-900">
+                          <table className="w-full text-[11px] text-left">
+                            <thead className="bg-gray-50 dark:bg-gray-850 text-[9px] uppercase font-bold text-gray-400 border-b">
+                              <tr>
+                                <th className="px-3 py-2">Parsed Product</th>
+                                <th className="px-3 py-2 text-center">Qty</th>
+                                <th className="px-3 py-2 text-right">Unit cost</th>
+                                <th className="px-3 py-2 text-right">Total</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody className="divide-y">
+                              {scannedResult.items.map((item: any, idx: number) => (
+                                <tr key={idx}>
+                                  <td className="px-3 py-2.5">
+                                    <input
+                                      type="text"
+                                      value={item.name}
+                                      onChange={(e) => {
+                                        const updatedItems = [...scannedResult.items];
+                                        updatedItems[idx].name = e.target.value;
+                                        setScannedResult({ ...scannedResult, items: updatedItems });
+                                      }}
+                                      className="font-bold text-gray-800 dark:text-white bg-transparent border-b border-transparent focus:border-gray-200 focus:outline-none w-full"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <input
+                                      type="number"
+                                      value={item.quantity}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        const updatedItems = [...scannedResult.items];
+                                        updatedItems[idx].quantity = val;
+                                        updatedItems[idx].totalCost = val * item.unitCost;
+                                        setScannedResult({
+                                          ...scannedResult,
+                                          items: updatedItems,
+                                          totalAmount: updatedItems.reduce((acc, curr) => acc + curr.totalCost, 0)
+                                        });
+                                      }}
+                                      className="text-center font-semibold text-gray-800 dark:text-white bg-transparent border-b border-transparent focus:border-gray-200 focus:outline-none w-10"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={item.unitCost}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        const updatedItems = [...scannedResult.items];
+                                        updatedItems[idx].unitCost = val;
+                                        updatedItems[idx].totalCost = item.quantity * val;
+                                        setScannedResult({
+                                          ...scannedResult,
+                                          items: updatedItems,
+                                          totalAmount: updatedItems.reduce((acc, curr) => acc + curr.totalCost, 0)
+                                        });
+                                      }}
+                                      className="text-right font-semibold text-gray-800 dark:text-white bg-transparent border-b border-transparent focus:border-gray-200 focus:outline-none w-12"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right font-mono font-bold">
+                                    ${item.totalCost.toFixed(2)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
 
-                      {/* Total valuation summary */}
-                      <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-850 px-4 py-3 rounded-xl border">
-                        <span className="text-[10px] uppercase font-black text-gray-400">Total Invoice Valuation</span>
-                        <span className="font-mono font-black text-sm text-gray-900 dark:text-white">
-                          ${scannedResult.totalAmount.toFixed(2)}
-                        </span>
+                        {/* Total valuation summary */}
+                        <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-850 px-4 py-3 rounded-xl border">
+                          <span className="text-[10px] uppercase font-black text-gray-400">Total Invoice Valuation</span>
+                          <span className="font-mono font-black text-sm text-gray-900 dark:text-white">
+                            ${scannedResult.totalAmount.toFixed(2)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-24 text-gray-400">
-                      <div className="text-3xl mb-2">🤖</div>
-                      <p className="text-xs font-bold text-gray-500">Awaiting AI Parsing Scan</p>
-                      <p className="text-[10px] text-gray-400 mt-1">Select a preset or paste an invoice raw text dump on the left, then click Trigger AI Scan.</p>
+                    ) : (
+                      <div className="text-center py-24 text-gray-400">
+                        <div className="text-3xl mb-2">🤖</div>
+                        <p className="text-xs font-bold text-gray-500">Awaiting AI Parsing Scan</p>
+                        <p className="text-[10px] text-gray-400 mt-1">Select a preset or paste an invoice raw text dump on the left, then click Trigger AI Scan.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {scannedResult && (
+                    <div className="pt-6 border-t mt-6 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setScannedResult(null)}
+                        className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-600 dark:text-gray-300 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
+                      >
+                        Clear result
+                      </button>
+                      <button
+                        id="btn-scan-approve-receive"
+                        type="button"
+                        onClick={handleApproveScannedInvoice}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white font-black px-5 py-2 rounded-xl text-xs cursor-pointer shadow-md shadow-emerald-500/10 transition-all flex items-center gap-1.5"
+                      >
+                        <CheckCircle size={12} /> Approve & Ingest Stock
+                      </button>
                     </div>
                   )}
                 </div>
-
-                {scannedResult && (
-                  <div className="pt-6 border-t mt-6 flex justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setScannedResult(null)}
-                      className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-600 dark:text-gray-300 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
-                    >
-                      Clear result
-                    </button>
-                    <button
-                      id="btn-scan-approve-receive"
-                      type="button"
-                      onClick={handleApproveScannedInvoice}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-black px-5 py-2 rounded-xl text-xs cursor-pointer shadow-md shadow-emerald-500/10 transition-all flex items-center gap-1.5"
-                    >
-                      <CheckCircle size={12} /> Approve & Ingest Stock
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
-          </div>
+          )}
+
+          {scanMode === 'qrcode' && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-850 rounded-3xl p-6 shadow-sm">
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
+                <span className="p-1.5 bg-indigo-500/10 text-indigo-500 rounded-lg">
+                  <QrCode size={16} />
+                </span>
+                Raw Goods Case QR Laser Scanner
+              </h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 max-w-2xl mb-6">
+                Scan the high-density QR code labels affixed to vendor crates or delivery pallets. Decoding QR labels automatically extracts critical batch numbers, supplier trace logs, product SKUs, and counts for instant BOH check-in.
+              </p>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column: QR Presets & Live Laser simulation */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-2">Select Ready-Made Delivery Crates QR Codes</label>
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        {
+                          title: "📦 Sysco Crate: Wagyu Beef Ribeye",
+                          desc: "Affixed label for 5 units of premium beef - Batch #SYS-88219",
+                          data: {
+                            productId: "p-beef",
+                            productName: "Wagyu Beef Ribeye",
+                            quantity: 5,
+                            batchNumber: "B-SYS-88219-WAGYU",
+                            expiryDate: "2026-07-25",
+                            supplierName: "Meat Masters Inc."
+                          }
+                        },
+                        {
+                          title: "📦 Farm Box: Fresh Roma Tomatoes",
+                          desc: "Affixed label for 10 units of field vegetables - Batch #VEG-09182",
+                          data: {
+                            productId: "p-tomato",
+                            productName: "Fresh Roma Tomatoes",
+                            quantity: 10,
+                            batchNumber: "B-VEG-09182-ROMA",
+                            expiryDate: "2026-07-16",
+                            supplierName: "Quality Produce Co."
+                          }
+                        },
+                        {
+                          title: "📦 Dairy Tub: Premium Heavy Cream",
+                          desc: "Affixed label for 4 cases of premium cream - Batch #DRY-77165",
+                          data: {
+                            productId: "p-cream",
+                            productName: "Premium Heavy Cream",
+                            quantity: 4,
+                            batchNumber: "B-DRY-77165-CREAM",
+                            expiryDate: "2026-07-20",
+                            supplierName: "Dairy Fresh Farms"
+                          }
+                        }
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleQrScanPreset(preset.data)}
+                          className="text-left text-xs bg-gray-50 dark:bg-gray-850 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 border border-gray-100 dark:border-gray-800 p-3 rounded-xl cursor-pointer font-semibold transition-colors flex items-center justify-between"
+                        >
+                          <div>
+                            <span className="font-extrabold text-gray-800 dark:text-white block">{preset.title}</span>
+                            <span className="text-[10px] text-gray-400 font-medium">{preset.desc}</span>
+                          </div>
+                          <span className="text-[10px] text-indigo-500 hover:underline shrink-0 ml-2">Scan Case label</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Simulated Camera Viewfinder with laser */}
+                  <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-inner flex flex-col items-center justify-center text-center p-4">
+                    {/* Glowing green corner alignments */}
+                    <div className="absolute inset-8 border-2 border-dashed border-emerald-500/30 rounded-xl pointer-events-none flex items-center justify-center">
+                      <div className="absolute top-0 inset-x-0 h-0.5 bg-emerald-400 shadow-[0_0_8px_#34d399] animate-bounce" />
+                      
+                      <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-emerald-500 rounded-tl-sm" />
+                      <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-emerald-500 rounded-tr-sm" />
+                      <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-emerald-500 rounded-bl-sm" />
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-emerald-500 rounded-br-sm" />
+                    </div>
+
+                    {isQrScanning ? (
+                      <div className="space-y-3 z-10">
+                        <span className="text-2xl animate-spin inline-block">🎯</span>
+                        <h5 className="text-xs font-bold text-emerald-400 uppercase tracking-widest animate-pulse">Laser Targeting QR Label...</h5>
+                        <p className="text-[9px] text-slate-500 max-w-xs">Acquiring matrix data payload & check-sum verification.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 z-10">
+                        <span className="text-2xl animate-pulse">📹</span>
+                        <h5 className="text-xs font-bold text-slate-300 font-mono tracking-wide">Live BOH Camera Scanner Viewfinder</h5>
+                        <p className="text-[9px] text-slate-500 max-w-xs leading-normal">
+                          Position delivery pallet labels inside the viewfinder. Click on any crate preset above to simulate scanning.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: Scanned QR decoded parameters Review Grid */}
+                <div className="border border-gray-100 dark:border-gray-850 p-5 rounded-2xl bg-gray-50/20 dark:bg-gray-950/20 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Decoded QR label Parameters</h4>
+
+                    {qrScannedResult ? (
+                      <div className="space-y-4">
+                        {/* Meta Decoded parameters */}
+                        <div className="grid grid-cols-2 gap-3 bg-white dark:bg-gray-900 border p-3 rounded-xl text-xs">
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-gray-400">Supplier Matching</div>
+                            <span className="font-bold text-gray-800 dark:text-white block mt-1">{qrScannedResult.supplierName}</span>
+                          </div>
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-gray-400">Trace Batch Code #</div>
+                            <span className="font-mono font-bold text-indigo-500 block mt-1">{qrScannedResult.batchNumber}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 bg-white dark:bg-gray-900 border p-3 rounded-xl text-xs">
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-gray-400">Decoded SKU Match</div>
+                            <span className="font-bold text-gray-800 dark:text-white block mt-1">{qrScannedResult.productName}</span>
+                          </div>
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-gray-400">Delivery Expiry Cell</div>
+                            <span className="font-mono font-semibold text-rose-500 block mt-1">{qrScannedResult.expiryDate}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 bg-white dark:bg-gray-900 border p-3 rounded-xl text-xs">
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-gray-400">Crate Packaging Quantity</div>
+                            <span className="text-sm font-black text-slate-800 dark:text-white block mt-1">
+                              {qrScannedResult.quantity} Packages / Boxes
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Destination store outlet selector */}
+                        <div className="bg-white dark:bg-gray-900 border p-4 rounded-xl text-xs">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-2">Check-in Destination Location</label>
+                          <select
+                            id="select-qr-store"
+                            value={selectedScanStoreId}
+                            onChange={(e) => setSelectedScanStoreId(e.target.value)}
+                            className="w-full bg-gray-50 dark:bg-gray-850 border border-gray-100 dark:border-gray-800 rounded-xl px-2.5 py-2 text-xs focus:outline-none font-bold"
+                          >
+                            {stores.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                📍 {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-64 flex flex-col items-center justify-center text-center text-gray-400 border border-dashed rounded-xl bg-white dark:bg-gray-900">
+                        <span className="text-3xl mb-2">🎯</span>
+                        <p className="text-xs font-bold">No active QR label decoded.</p>
+                        <p className="text-[9px] text-gray-400 max-w-[200px] mt-1">
+                          Click any ready-made crate label on the left column to run the laser check.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {qrScannedResult && (
+                    <div className="mt-6 pt-4 border-t">
+                      <button
+                        id="btn-qr-ingest"
+                        type="button"
+                        onClick={handleIngestQrDelivery}
+                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-2.5 rounded-xl text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <CheckCircle size={12} /> Confirm Delivery Ingestion & Increase Stock
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

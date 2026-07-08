@@ -34,9 +34,13 @@ import { AdminSuppliers } from './components/admin/AdminSuppliers';
 import { AdminEvents } from './components/admin/AdminEvents';
 import { AdminLocations } from './components/admin/AdminLocations';
 import { AdminWastage } from './components/admin/AdminWastage';
+import { AdminBarcodeScanner } from './components/admin/AdminBarcodeScanner';
+
+// Firebase Sync Integration
+import { loadCollectionFromFirestore, saveCollectionToFirestore } from './firebase';
 
 // Icons
-import { LayoutDashboard, Package, ShoppingCart, ChefHat, ArrowLeftRight, ClipboardList, Zap, Settings, ShieldAlert, Truck, Calendar, MapPin, Menu, X, Trash2, Sparkles, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, ChefHat, ArrowLeftRight, ClipboardList, Zap, Settings, ShieldAlert, Truck, Calendar, MapPin, Menu, X, Trash2, Sparkles, MessageSquare, QrCode, Lock } from 'lucide-react';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<'admin' | 'customer'>('admin');
@@ -172,10 +176,113 @@ export default function App() {
   const [stocktakeHistory, setStocktakeHistory] = useState<StocktakeHistory[]>(INITIAL_STOCKTAKE_HISTORY);
   const [suppliers, setSuppliers] = useState<Supplier[]>(INITIAL_SUPPLIERS);
   const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
-
-  // User and branding states
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [currentUser, setCurrentUser] = useState<User>(INITIAL_USERS[0]);
+
+  // Firebase Database Sync State
+  const [isFirebaseLoading, setIsFirebaseLoading] = useState(true);
+
+  React.useEffect(() => {
+    async function initFirebase() {
+      try {
+        const dbProducts = await loadCollectionFromFirestore<Product>('products', INITIAL_PRODUCTS);
+        setProducts(dbProducts);
+        
+        const dbStores = await loadCollectionFromFirestore<Store>('stores', INITIAL_STORES);
+        setStores(dbStores);
+        
+        const dbInventories = await loadCollectionFromFirestore<Inventory>('inventories', INITIAL_INVENTORIES);
+        setInventories(dbInventories);
+        
+        const dbRecipes = await loadCollectionFromFirestore<Recipe>('recipes', INITIAL_RECIPES);
+        setRecipes(dbRecipes);
+        
+        const dbOrders = await loadCollectionFromFirestore<PurchaseOrder>('purchaseOrders', INITIAL_PURCHASE_ORDERS);
+        setPurchaseOrders(dbOrders);
+        
+        const dbBatchJobs = await loadCollectionFromFirestore<BatchJob>('batchJobs', INITIAL_BATCH_JOBS);
+        setBatchJobs(dbBatchJobs);
+        
+        const dbTransfers = await loadCollectionFromFirestore<StockTransfer>('transfers', INITIAL_TRANSFERS);
+        setTransfers(dbTransfers);
+        
+        const dbAdjustments = await loadCollectionFromFirestore<StockAdjustment>('adjustments', INITIAL_ADJUSTMENTS);
+        setAdjustments(dbAdjustments);
+        
+        const dbStocktake = await loadCollectionFromFirestore<StocktakeHistory>('stocktakeHistory', INITIAL_STOCKTAKE_HISTORY);
+        setStocktakeHistory(dbStocktake);
+        
+        const dbSuppliers = await loadCollectionFromFirestore<Supplier>('suppliers', INITIAL_SUPPLIERS);
+        setSuppliers(dbSuppliers);
+        
+        const dbUsers = await loadCollectionFromFirestore<User>('users', INITIAL_USERS);
+        setUsers(dbUsers);
+        
+        setIsFirebaseLoading(false);
+      } catch (err) {
+        console.error('Firebase initial load failed, using local fallback:', err);
+        setIsFirebaseLoading(false);
+      }
+    }
+    initFirebase();
+  }, []);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('products', products);
+  }, [products, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('stores', stores);
+  }, [stores, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('inventories', inventories);
+  }, [inventories, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('recipes', recipes);
+  }, [recipes, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('purchaseOrders', purchaseOrders);
+  }, [purchaseOrders, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('batchJobs', batchJobs);
+  }, [batchJobs, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('transfers', transfers);
+  }, [transfers, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('adjustments', adjustments);
+  }, [adjustments, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('stocktakeHistory', stocktakeHistory);
+  }, [stocktakeHistory, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('suppliers', suppliers);
+  }, [suppliers, isFirebaseLoading]);
+
+  React.useEffect(() => {
+    if (isFirebaseLoading) return;
+    saveCollectionToFirestore('users', users);
+  }, [users, isFirebaseLoading]);
+
+  // User and branding states
   const [restaurantDetails, setRestaurantDetails] = useState({
     name: 'Bento & Skillet Bistro',
     logoEmoji: '🍳',
@@ -437,6 +544,7 @@ export default function App() {
             <nav className="flex-1 flex flex-col gap-1.5 overflow-y-auto pr-1">
               {[
                 { id: 'dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+                { id: 'scanner', label: 'BOH Laser Scanner', icon: QrCode },
                 { id: 'products', label: 'Products & Wizard', icon: Package },
                 { id: 'orders', label: 'Procure Orders', icon: ShoppingCart },
                 { id: 'wastage', label: 'Wastage Analytics', icon: Trash2 },
@@ -451,22 +559,32 @@ export default function App() {
               ].map((item) => {
                 const Icon = item.icon;
                 const active = activeAdminTab === item.id;
+                const userPermsArray = currentUser.permissions || ['dashboard', 'products', 'orders', 'wastage', 'recipes', 'logistics', 'stocks', 'locations', 'suppliers', 'events', 'sales', 'support', 'scanner'];
+                const isLocked = !userPermsArray.includes(item.id);
+
                 return (
                   <button
                     key={item.id}
                     id={`btn-sidebar-nav-${item.id}`}
                     onClick={() => {
+                      if (isLocked) {
+                        alert(`🔒 Access Denied:\n\nYour active session profile (${currentUser.name} - ${currentUser.role}) does not possess authorization for the [${item.label}] page.\n\nYou can switch to Sarah Jenkins (Admin) or Elena Rostova (Manager) inside the "Support & Settings" tab to simulate higher access levels.`);
+                        return;
+                      }
                       setActiveAdminTab(item.id);
                       setIsSidebarOpen(false);
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left cursor-pointer ${
                       active
                         ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-md shadow-gray-950/10'
+                        : isLocked
+                        ? 'bg-transparent text-gray-300 dark:text-gray-700 cursor-not-allowed opacity-60'
                         : 'bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:hover:bg-gray-850'
                     }`}
                   >
                     <Icon size={16} />
                     <span>{item.label}</span>
+                    {isLocked && <Lock size={12} className="ml-auto text-gray-400 dark:text-gray-600 animate-pulse" />}
                   </button>
                 );
               })}
@@ -538,6 +656,20 @@ export default function App() {
                 currentStoreId={adminStoreId}
                 setCurrentStoreId={setAdminStoreId}
                 onNavigateToTab={setActiveAdminTab}
+                setPurchaseOrders={setPurchaseOrders}
+                setTransfers={setTransfers}
+              />
+            )}
+
+            {activeAdminTab === 'scanner' && (
+              <AdminBarcodeScanner
+                stores={stores}
+                products={products}
+                inventories={inventories}
+                setInventories={setInventories}
+                adjustments={adjustments}
+                setAdjustments={setAdjustments}
+                currentUser={currentUser}
               />
             )}
 
@@ -560,6 +692,7 @@ export default function App() {
                 products={products}
                 stores={stores}
                 setInventories={setInventories}
+                inventories={inventories}
               />
             )}
 

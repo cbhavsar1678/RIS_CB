@@ -781,6 +781,116 @@ export const AdminStockControl: React.FC<AdminStockControlProps> = ({
 
             </div>
 
+            {/* WASTAGE IMPACT VISUALIZATION DASHBOARD */}
+            {(() => {
+              // Calculate environmental metrics
+              let totalCO2Kg = 0;
+              let totalWaterLiters = 0;
+              
+              filteredWastage.forEach((adj) => {
+                const prod = products.find((p) => p.id === adj.productId);
+                if (prod) {
+                  const qty = Math.abs(adj.quantity);
+                  if (prod.category === 'Protein') {
+                    totalCO2Kg += qty * 15.4;
+                    totalWaterLiters += qty * 4300;
+                  } else if (prod.category === 'Dairy') {
+                    totalCO2Kg += qty * 4.2;
+                    totalWaterLiters += qty * 1000;
+                  } else if (prod.category === 'Produce') {
+                    totalCO2Kg += qty * 1.2;
+                    totalWaterLiters += qty * 250;
+                  } else {
+                    totalCO2Kg += qty * 2.1;
+                    totalWaterLiters += qty * 450;
+                  }
+                }
+              });
+
+              const profitRecoverySalesNeeded = filteredWastageCost / 0.3; // assuming standard 30% food cost
+
+              // Group 7-day trend
+              const last7Days = Array.from({ length: 7 }, (_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - (6 - i));
+                return d.toISOString().split('T')[0];
+              });
+
+              const trendData = last7Days.map(dateStr => {
+                const sum = filteredWastage
+                  .filter(adj => adj.date.startsWith(dateStr))
+                  .reduce((s, adj) => s + Math.abs(adj.costValue), 0);
+                return { date: dateStr, amount: sum };
+              });
+
+              const maxAmount = Math.max(...trendData.map(d => d.amount), 1);
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-rose-500/5 border border-rose-500/10 dark:border-rose-500/20 rounded-3xl p-6">
+                  <div className="md:col-span-3 pb-1 border-b border-rose-500/10">
+                    <h3 className="text-xs font-black uppercase text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                      🌍 Food Wastage Real-world Impact Assessment
+                    </h3>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Translating Back-of-House inventory waste into margins burden and carbon footprints.</p>
+                  </div>
+
+                  {/* Recovery burden card */}
+                  <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-2">
+                    <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest block">Financial Profit Burdens</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-black text-rose-500 font-mono">${profitRecoverySalesNeeded.toFixed(0)}</span>
+                      <span className="text-[10px] text-gray-500">Sales Required</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 leading-snug">
+                      Assuming a industry-standard <strong>30% raw food cost margin</strong>, waitstaff must ring up <strong>${profitRecoverySalesNeeded.toFixed(2)}</strong> in menu orders just to pay off the <strong>${filteredWastageCost.toFixed(2)}</strong> loss of ingredients.
+                    </p>
+                  </div>
+
+                  {/* Environmental footprint card */}
+                  <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-2">
+                    <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest block">Ecological Depletion</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-black text-emerald-500 font-mono">{totalCO2Kg.toFixed(0)} kg</span>
+                      <span className="text-[10px] text-gray-500">CO₂ lost</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 leading-snug">
+                      Wasting these raw goods squanders equivalent water reservoirs of <strong>{totalWaterLiters.toLocaleString()} liters</strong>, and releases greenhouse footprints comparable to driving a diesel van for <strong>{(totalCO2Kg * 2.5).toFixed(0)} miles</strong>!
+                    </p>
+                  </div>
+
+                  {/* Interactive Trend Column */}
+                  <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest block">7-Day Waste Trend</span>
+                      <span className="text-[9px] font-mono bg-rose-50 text-rose-600 px-1.5 py-0.2 rounded dark:bg-rose-950/20 dark:text-rose-400 font-bold">
+                        Daily cost shares
+                      </span>
+                    </div>
+                    <div className="flex items-end justify-between h-20 px-1 pb-1">
+                      {trendData.map((d, i) => {
+                        const heightPct = (d.amount / maxAmount) * 100;
+                        return (
+                          <div key={i} className="flex flex-col items-center flex-1 group relative">
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full mb-1 bg-gray-900 text-white text-[9px] font-mono px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap">
+                              ${d.amount.toFixed(1)}
+                            </div>
+                            <div 
+                              className="w-4 bg-rose-400 hover:bg-rose-500 dark:bg-rose-500/80 dark:hover:bg-rose-500 rounded-t transition-all cursor-pointer" 
+                              style={{ height: `${Math.max(4, heightPct)}%` }}
+                            />
+                            <span className="text-[8px] font-mono mt-1 text-gray-400">
+                              {new Date(d.date).toLocaleDateString(undefined, { weekday: 'narrow' })}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* INTERACTIVE FILTER TOOLBAR & GRID */}
             <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-850 p-6 rounded-3xl shadow-sm space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">

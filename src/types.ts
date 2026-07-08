@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type Role = 'Admin' | 'Manager' | 'Customer' | 'Supplier';
+export type Role = 'Admin' | 'Manager' | 'Customer' | 'Supplier' | 'Staff' | 'Support Team';
 
 export interface User {
   id: string;
@@ -11,6 +11,7 @@ export interface User {
   email: string;
   role: Role;
   storeId?: string; // Optional: managers are bound to specific stores
+  permissions?: string[]; // Granular page permission tabs
 }
 
 export interface Store {

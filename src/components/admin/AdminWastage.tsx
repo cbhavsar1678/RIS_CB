@@ -4,8 +4,23 @@
  */
 
 import React, { useState } from 'react';
-import { Trash2, AlertTriangle, Filter, Plus, ShieldAlert, Sparkles, RefreshCw, Calendar, TrendingDown, HelpCircle } from 'lucide-react';
+import { Trash2, AlertTriangle, Filter, Plus, ShieldAlert, Sparkles, RefreshCw, Calendar, TrendingDown, HelpCircle, BarChart3, PieChart as PieIcon } from 'lucide-react';
 import { Store, Product, Inventory, StockAdjustment } from '../../types';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  Legend
+} from 'recharts';
 
 interface AdminWastageProps {
   stores: Store[];
@@ -287,6 +302,60 @@ export const AdminWastage: React.FC<AdminWastageProps> = ({
     }, 1200);
   };
 
+  // 1. Weekly trend cost
+  const getWeeklyTrendData = () => {
+    const trendMap: { [key: string]: number } = {};
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      trendMap[dateStr] = 0;
+    }
+
+    wasteAdjustments.forEach(adj => {
+      const dateStr = new Date(adj.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (trendMap[dateStr] !== undefined) {
+        trendMap[dateStr] += Math.abs(adj.costValue || 0);
+      }
+    });
+
+    return Object.keys(trendMap).map(key => ({
+      name: key,
+      'Loss Value ($)': parseFloat(trendMap[key].toFixed(2))
+    }));
+  };
+
+  // 2. Breakdown by Spoilage Reason
+  const getReasonBreakdownData = () => {
+    const reasons = { Wastage: 0, Spoilage: 0, Theft: 0 };
+    wasteAdjustments.forEach(adj => {
+      const reason = adj.reason as 'Wastage' | 'Spoilage' | 'Theft';
+      if (reasons[reason] !== undefined) {
+        reasons[reason] += Math.abs(adj.costValue || 0);
+      }
+    });
+    return [
+      { name: 'Kitchen Prep', value: parseFloat(reasons.Wastage.toFixed(2)), color: '#3b82f6' },
+      { name: 'Expired Spoilage', value: parseFloat(reasons.Spoilage.toFixed(2)), color: '#ef4444' },
+      { name: 'Shrinkage & Theft', value: parseFloat(reasons.Theft.toFixed(2)), color: '#f59e0b' }
+    ].filter(item => item.value > 0);
+  };
+
+  // 3. Spoilage by Product Category
+  const getCategoryBreakdownData = () => {
+    const categories: { [key: string]: number } = {};
+    wasteAdjustments.forEach(adj => {
+      const prod = products.find(p => p.id === adj.productId);
+      const cat = prod ? prod.category : 'Perishables';
+      categories[cat] = (categories[cat] || 0) + Math.abs(adj.costValue || 0);
+    });
+    return Object.keys(categories).map(cat => ({
+      name: cat,
+      'Cost Impact ($)': parseFloat(categories[cat].toFixed(2))
+    })).sort((a, b) => b['Cost Impact ($)'] - a['Cost Impact ($)']);
+  };
+
   return (
     <div className="space-y-6" id="admin-wastage-dashboard">
       
@@ -385,6 +454,127 @@ export const AdminWastage: React.FC<AdminWastageProps> = ({
           </div>
         </div>
 
+      </div>
+
+      {/* Dynamic Wastage Analytics Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" id="wastage-charts-container">
+        {/* 7-Day Loss Trend Area Chart */}
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-850 shadow-sm space-y-4">
+          <div>
+            <h3 className="font-extrabold text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
+              <TrendingDown className="text-red-500" size={16} />
+              7-Day Spoilage & Shrinkage Cost Trend
+            </h3>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500">
+              Daily BOH financial loss tracking (USD value of discarded inventory ingredients)
+            </p>
+          </div>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={getWeeklyTrendData()} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2}/>
+                    <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" className="dark:stroke-gray-800" />
+                <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} tickLine={false} axisLine={false} />
+                <YAxis stroke="#94a3b8" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff', fontSize: '11px' }}
+                  formatter={(value: any) => [`$${value}`, 'Loss Value']}
+                />
+                <Area type="monotone" dataKey="Loss Value ($)" stroke="#f43f5e" strokeWidth={2.5} fillOpacity={1} fill="url(#colorLoss)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Breakdown Row: Category Losses & Reason Breakdown */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {/* Category Impact Bar Chart */}
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-850 shadow-sm space-y-4">
+            <div>
+              <h3 className="font-extrabold text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
+                <BarChart3 className="text-blue-500" size={16} />
+                Loss by Ingredient Category
+              </h3>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                Financial impact by product catalog segment
+              </p>
+            </div>
+            <div className="h-52 w-full">
+              {getCategoryBreakdownData().length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={getCategoryBreakdownData()} layout="vertical" margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" className="dark:stroke-gray-800" />
+                    <XAxis type="number" stroke="#94a3b8" fontSize={8} tickLine={false} axisLine={false} />
+                    <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={8} width={65} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff', fontSize: '10px' }}
+                      formatter={(value: any) => [`$${value}`, 'Cost Lost']}
+                    />
+                    <Bar dataKey="Cost Impact ($)" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={12} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-xs text-gray-400">
+                  No active categories with loss data
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Reason Breakdown Pie Chart */}
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-850 shadow-sm space-y-4">
+            <div>
+              <h3 className="font-extrabold text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
+                <PieIcon className="text-amber-500" size={16} />
+                Loss Vectors Breakdown
+              </h3>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                Proportion of kitchen waste, expired food, and theft
+              </p>
+            </div>
+            <div className="h-32 w-full relative flex items-center justify-center">
+              {getReasonBreakdownData().length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={getReasonBreakdownData()}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={35}
+                      outerRadius={50}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {getReasonBreakdownData().map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff', fontSize: '10px' }}
+                      formatter={(value: any) => [`$${value}`, 'Amount']}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-xs text-gray-400">No active loss reason data</div>
+              )}
+            </div>
+            {/* Custom Legend */}
+            <div className="grid grid-cols-3 gap-1.5 text-[9px] font-bold text-gray-500 mt-2">
+              {getReasonBreakdownData().map((entry, idx) => (
+                <div key={idx} className="flex items-center gap-1 truncate" title={entry.name}>
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                  <span className="truncate">{entry.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* AI Recommendations Drawer (If triggered) */}

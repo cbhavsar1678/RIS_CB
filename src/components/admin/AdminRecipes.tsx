@@ -34,6 +34,7 @@ export const AdminRecipes: React.FC<AdminRecipesProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'recipes' | 'create' | 'batches'>('recipes');
   const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
 
   // Create Recipe Form State
   const [recipeName, setRecipeName] = useState('');
@@ -597,41 +598,95 @@ export const AdminRecipes: React.FC<AdminRecipesProps> = ({
               {batchJobs.map((job) => {
                 const recipeName = recipes.find(r=>r.id === job.recipeId)?.name || 'House Formula';
                 const storeName = stores.find(s=>s.id === job.storeId)?.name || 'Downtown';
+                const isExpanded = expandedJobId === job.id;
+                const recipeObj = recipes.find(r=>r.id === job.recipeId);
+
                 return (
-                  <div
-                    key={job.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-gray-50 dark:border-gray-850 rounded-2xl"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
-                          job.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600 animate-pulse'
-                        }`}>
-                          {job.status}
-                        </span>
-                        <span className="font-bold text-xs text-gray-900 dark:text-white">Job #{job.id}</span>
+                  <div key={job.id} className="border border-gray-100 dark:border-gray-850 rounded-2xl overflow-hidden bg-gray-50/20">
+                    <div
+                      className="flex flex-col sm:flex-row sm:items-center justify-between p-4 cursor-pointer hover:bg-gray-50/50"
+                      onClick={() => job.status === 'Completed' && setExpandedJobId(isExpanded ? null : job.id)}
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                            job.status === 'Completed' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400' : 'bg-orange-50 text-orange-600 animate-pulse'
+                          }`}>
+                            {job.status}
+                          </span>
+                          <span className="font-bold text-xs text-gray-900 dark:text-white">Job #{job.id}</span>
+                        </div>
+                        <h4 className="font-bold text-xs">{recipeName}</h4>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          Factory Node: {storeName} • Batch Quantity: {job.quantityProduced} • Date: {new Date(job.batchDate).toLocaleString()}
+                        </p>
                       </div>
-                      <h4 className="font-bold text-xs">{recipeName}</h4>
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        Factory Node: {storeName} • Batch Quantity: {job.quantityProduced} • Date: {new Date(job.batchDate).toLocaleString()}
-                      </p>
+
+                      <div className="mt-3 sm:mt-0 flex items-center gap-3">
+                        {job.status === 'Processing' ? (
+                          <button
+                            id={`btn-complete-batch-${job.id}`}
+                            onClick={(e) => { e.stopPropagation(); handleCompleteBatchJob(job.id); }}
+                            className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-xl text-xs cursor-pointer shadow-sm"
+                          >
+                            <Check size={12} /> Complete & Deplete Raw Stock
+                          </button>
+                        ) : (
+                          <div className="flex flex-col items-end text-xs">
+                            <span className="text-emerald-500 font-bold flex items-center gap-1">
+                              <Check size={14} /> Completed & Deducted
+                            </span>
+                            <span className="text-[9px] text-indigo-500 font-extrabold underline hover:text-indigo-600 mt-1">
+                              {isExpanded ? 'Hide Consumption Audit' : '🔍 Audit Raw Deductions'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="mt-3 sm:mt-0">
-                      {job.status === 'Processing' ? (
-                        <button
-                          id={`btn-complete-batch-${job.id}`}
-                          onClick={() => handleCompleteBatchJob(job.id)}
-                          className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-xl text-xs cursor-pointer shadow-sm"
-                        >
-                          <Check size={12} /> Complete & Deplete Raw Stock
-                        </button>
-                      ) : (
-                        <span className="text-xs text-emerald-500 font-bold flex items-center gap-1">
-                          <Check size={14} /> Completed & Deducted
-                        </span>
-                      )}
-                    </div>
+                    {isExpanded && recipeObj && (
+                      <div className="bg-white dark:bg-gray-900/60 p-4 border-t border-gray-100 dark:border-gray-850 text-xs space-y-3">
+                        <div className="flex justify-between items-center border-b pb-2">
+                          <span className="font-extrabold text-[10px] text-gray-400 uppercase tracking-widest">Raw Ingredient Deduction Audit Trace</span>
+                          <span className="text-[10px] text-gray-400 font-mono">Job Ref: #{job.id}</span>
+                        </div>
+                        <div className="divide-y divide-gray-50 dark:divide-gray-800">
+                          {recipeObj.ingredients.map((ing) => {
+                            const prod = products.find((p) => p.id === ing.productId);
+                            if (!prod) return null;
+                            const consumedAmount = (job.quantityProduced / recipeObj.yieldQty) * ing.quantity;
+                            const unitCost = prod.basePrice / prod.unitsPerPackage;
+                            const totalLoss = consumedAmount * unitCost;
+
+                            return (
+                              <div key={ing.productId} className="py-2 flex justify-between items-center font-medium">
+                                <div>
+                                  <span className="font-bold text-gray-900 dark:text-white">{prod.name}</span>
+                                  <span className="text-[10px] text-gray-400 block mt-0.5">
+                                    Deducted: -{consumedAmount.toFixed(2)} {prod.stockingUnit} from inventory at {storeName}
+                                  </span>
+                                </div>
+                                <div className="text-right font-mono">
+                                  <span className="text-gray-400 text-[10px] block">${unitCost.toFixed(2)} / {prod.stockingUnit}</span>
+                                  <span className="text-gray-900 dark:text-white font-bold">${totalLoss.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="border-t pt-2 flex justify-between items-center font-bold text-xs bg-gray-50/50 dark:bg-gray-850/10 p-2 rounded-xl">
+                          <span className="text-gray-500">Total Pre-Batch Material Cost:</span>
+                          <span className="font-mono text-slate-900 dark:text-white font-extrabold">
+                            ${recipeObj.ingredients.reduce((sum, ing) => {
+                              const prod = products.find((p) => p.id === ing.productId);
+                              if (!prod) return sum;
+                              const consumedAmount = (job.quantityProduced / recipeObj.yieldQty) * ing.quantity;
+                              return sum + consumedAmount * (prod.basePrice / prod.unitsPerPackage);
+                            }, 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

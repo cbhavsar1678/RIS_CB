@@ -1,0 +1,87 @@
+{
+  "collections": {
+    "products": {
+      "description": "Catalog of restaurant inventory products",
+      "fields": {
+        "id": "string",
+        "name": "string",
+        "sku": "string",
+        "category": "string",
+        "basePrice": "number",
+        "taxRate": "number",
+        "packagingUnit": "string",
+        "unitsPerPackage": "number",
+        "stockingUnit": "string",
+        "allergens": "array",
+        "supplierId": "string",
+        "isActive": "boolean",
+        "isArchived": "boolean"
+      }
+    },
+    "stores": {
+      "description": "Store branches or outlet nodes",
+      "fields": {
+        "id": "string",
+        "name": "string",
+        "code": "string",
+        "address": "string",
+        "phone": "string",
+        "isActive": "boolean",
+        "latitude": "number",
+        "longitude": "number"
+      }
+    },
+    "inventories": {
+      "description": "Current stock levels per store and product",
+      "fields": {
+        "id": "string",
+        "productId": "string",
+        "storeId": "string",
+        "theoreticalStock": "number",
+        "reorderPoint": "number",
+        "parLevel": "number",
+        "storageLocation": "string"
+      }
+    },
+    "adjustments": {
+      "description": "Audit and spoilage adjustment logs",
+      "fields": {
+        "id": "string",
+        "productId": "string",
+        "storeId": "string",
+        "date": "string",
+        "quantity": "number",
+        "reason": "string",
+        "costValue": "number",
+        "notes": "string",
+        "performedBy": "string"
+      }
+    },
+    "purchaseOrders": {
+      "description": "Orders dispatched to suppliers",
+      "fields": {
+        "id": "string",
+        "supplierId": "string",
+        "storeId": "string",
+        "orderDate": "string",
+        "deliveryDate": "string",
+        "status": "string",
+        "totalAmount": "number",
+        "items": "array"
+      }
+    },
+    "batchJobs": {
+      "description": "Preparation / cooking batch jobs history",
+      "fields": {
+        "id": "string",
+        "recipeId": "string",
+        "storeId": "string",
+        "quantity": "number",
+        "date": "string",
+        "status": "string",
+        "performedBy": "string",
+        "notes": "string"
+      }
+    }
+  }
+}

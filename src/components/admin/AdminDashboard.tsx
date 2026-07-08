@@ -17,6 +17,8 @@ interface AdminDashboardProps {
   currentStoreId: string;
   setCurrentStoreId: (id: string) => void;
   onNavigateToTab: (tabId: string) => void;
+  setPurchaseOrders?: React.Dispatch<React.SetStateAction<PurchaseOrder[]>>;
+  setTransfers?: React.Dispatch<React.SetStateAction<StockTransfer[]>>;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -29,6 +31,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   currentStoreId,
   setCurrentStoreId,
   onNavigateToTab,
+  setPurchaseOrders,
+  setTransfers,
 }) => {
   // Filters by current select store
   const isMultiStore = currentStoreId === 'All';
@@ -79,6 +83,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const alertVarianceCounts = storeInventories.filter(
     (i) => i.actualStock !== undefined && i.actualStock !== i.theoreticalStock
   );
+
+  const handleDraftUrgentPO = (productId: string, storeId: string, shortage: number) => {
+    if (!setPurchaseOrders) return;
+
+    const prod = products.find(p => p.id === productId);
+    if (!prod) return;
+
+    // Standard package sizes: calculate packages to cover shortage
+    const qtyOrdered = Math.ceil(shortage / prod.unitsPerPackage) || 1;
+    const totalCost = qtyOrdered * prod.basePrice;
+
+    const newPO: PurchaseOrder = {
+      id: `po-draft-${Date.now().toString().slice(-4)}`,
+      supplierId: prod.supplierId,
+      storeId: storeId,
+      orderDate: new Date().toISOString(),
+      expectedDeliveryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+      status: 'Pending Approval',
+      totalAmount: totalCost,
+      createdBy: 'BOH Intelligent Alerter',
+      items: [
+        {
+          productId: productId,
+          quantityOrdered: qtyOrdered,
+          packageUnit: prod.packagingUnit,
+          costPerPackage: prod.basePrice,
+          totalCost: totalCost,
+        }
+      ]
+    };
+
+    setPurchaseOrders(prev => [newPO, ...prev]);
+    alert(`✅ Restock PO Drafted!\n\n• Ingredient: ${prod.name}\n• Drafted PO #${newPO.id.toUpperCase()} sent to Supplier.\n• Package Count: ${qtyOrdered} x ${prod.packagingUnit}.\n• Total Cost: $${totalCost.toFixed(2)}.\n\nGo to the "Procure Orders" tab to review and approve!`);
+  };
+
+  const handleRequestStockTransfer = (productId: string, fromStoreId: string, toStoreId: string, qty: number) => {
+    if (!setTransfers) return;
+
+    const prod = products.find(p => p.id === productId);
+    const fromStore = stores.find(s => s.id === fromStoreId);
+    const toStore = stores.find(s => s.id === toStoreId);
+    if (!prod || !fromStore || !toStore) return;
+
+    const newTransfer: StockTransfer = {
+      id: `tr-draft-${Date.now().toString().slice(-4)}`,
+      fromStoreId: fromStoreId,
+      toStoreId: toStoreId,
+      requestDate: new Date().toISOString(),
+      status: 'Requested',
+      requestedBy: 'BOH Real-Time Alerter',
+      notes: `Urgent stock balanced requested from excess reserves of ${fromStore.name} to fulfill shortage of ${qty.toFixed(1)} ${prod.stockingUnit} at ${toStore.name}.`,
+      items: [
+        {
+          productId: productId,
+          quantity: qty,
+          unit: prod.stockingUnit
+        }
+      ]
+    };
+
+    setTransfers(prev => [newTransfer, ...prev]);
+    alert(`🚚 Inter-Store Transfer Request Created!\n\n• Ingredient: ${prod.name}\n• From: ${fromStore.name}\n• To: ${toStore.name}\n• Volume: ${qty.toFixed(1)} ${prod.stockingUnit}.\n\nGo to the "Logistics Transfers" tab to approve and dispatch!`);
+  };
 
   return (
     <div className="space-y-6" id="admin-dashboard-container">
@@ -325,32 +392,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               Low Stock Warnings ({lowStockItems.length})
             </h3>
 
-            <div className="space-y-3.5 max-h-[280px] overflow-y-auto no-scrollbar pr-1">
+            <div className="space-y-3.5 max-h-[350px] overflow-y-auto no-scrollbar pr-1">
               {lowStockItems.map((inv) => {
                 const product = products.find((p) => p.id === inv.productId);
                 if (!product) return null;
                 const percentOfPar = (inv.theoreticalStock / inv.parLevel) * 100;
+                
+                // Find stores with surplus stock of this item to trigger direct transfers
+                const surplusStores = inventories.filter(
+                  (i) => i.productId === inv.productId && i.theoreticalStock > i.parLevel && i.storeId !== inv.storeId
+                );
+
                 return (
                   <div
                     key={inv.id}
-                    className="flex items-center justify-between text-xs border-b border-gray-50 dark:border-gray-850 pb-3 last:border-0 last:pb-0"
+                    className="border-b border-gray-50 dark:border-gray-850 pb-3 last:border-0 last:pb-0 space-y-2"
                   >
-                    <div className="max-w-[70%]">
-                      <div className="font-bold text-gray-900 dark:text-white line-clamp-1">{product.name}</div>
-                      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
-                        Theo Stock: {inv.theoreticalStock} {product.stockingUnit} / Par: {inv.parLevel} {product.stockingUnit}
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="max-w-[70%]">
+                        <div className="font-bold text-gray-900 dark:text-white line-clamp-1">{product.name}</div>
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                          Theo Stock: {inv.theoreticalStock} {product.stockingUnit} / Par: {inv.parLevel} {product.stockingUnit}
+                        </div>
+                        <div className="w-48 bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${percentOfPar < 30 ? 'bg-red-500' : 'bg-orange-500'}`}
+                            style={{ width: `${Math.min(percentOfPar, 100)}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${percentOfPar < 30 ? 'bg-red-500' : 'bg-orange-500'}`}
-                          style={{ width: `${Math.min(percentOfPar, 100)}%` }}
-                        />
+                      <div className="text-right shrink-0">
+                        <span className="bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-red-100 dark:border-red-900/30">
+                          {percentOfPar.toFixed(0)}% Par
+                        </span>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <span className="bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-red-100 dark:border-red-900/30">
-                        {percentOfPar.toFixed(0)}% Par
-                      </span>
+
+                    {/* Action Panel for Low Stock Resolve */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        id={`btn-dashboard-draft-po-${inv.id}`}
+                        onClick={() => handleDraftUrgentPO(product.id, inv.storeId, inv.parLevel - inv.theoreticalStock)}
+                        className="bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/20 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 font-extrabold px-2 py-1 rounded-lg text-[9px] cursor-pointer transition-all border border-indigo-100/50 dark:border-indigo-950/50"
+                      >
+                        🛒 Draft PO restock
+                      </button>
+
+                      {surplusStores.map((ss) => {
+                        const sourceStore = stores.find(s => s.id === ss.storeId);
+                        const sName = sourceStore?.name.split(' ')[0] || 'Store';
+                        const excessQty = ss.theoreticalStock - ss.parLevel;
+                        const transferQty = Math.min(inv.parLevel - inv.theoreticalStock, excessQty);
+                        
+                        return (
+                          <button
+                            key={ss.id}
+                            type="button"
+                            id={`btn-dashboard-transfer-${ss.storeId}-${inv.id}`}
+                            onClick={() => handleRequestStockTransfer(product.id, ss.storeId, inv.storeId, transferQty)}
+                            className="bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 font-extrabold px-2 py-1 rounded-lg text-[9px] cursor-pointer transition-all border border-emerald-100/50 dark:border-emerald-950/50"
+                            title={`Request a transfer of ${transferQty.toFixed(1)} ${product.stockingUnit} from surplus at ${sourceStore?.name}`}
+                          >
+                            📍 Transfer from {sName}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 );
